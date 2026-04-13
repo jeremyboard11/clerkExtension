@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <style>
+        /* Fixed dimensions for a consistent app-like feel */
+        body {
+            width: 350px;
+            height: 480px;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            background: #f0f2f5;
+            overflow-y: auto;
+        }
+
+        .view {
+            display: none;
+            width: 100%;
+            box-sizing: border-box;
+            padding: 16px;
+        }
+
+        .view.active {
+            display: block;
+        }
+
+        /* Navigation */
+        .header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            height: 40px;
+        }
+
+        .back-btn {
+            cursor: pointer;
+            background: #e4e6eb;
+            border: none;
+            border-radius: 4px;
+            font-size: 13px;
+            padding: 6px 10px;
+            margin-right: 12px;
+            font-weight: 600;
+        }
+
+        /* Grouping */
+        .section-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: #65676b;
+            text-transform: uppercase;
+            margin: 15px 0 8px 4px;
+        }
+
+        /* Rows */
+        .settings-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #ffffff;
+            padding: 12px 16px;
+            margin-bottom: 2px;
+            border-radius: 6px;
+            cursor: pointer;
+            border: 1px solid transparent;
+        }
+
+        .menu-row:hover {
+            border-color: #2196F3;
+        }
+
+        .label-text {
+            font-size: 14px;
+            color: #050505;
+        }
+
+        .arrow-text {
+            color: #bcc0c4;
+            font-family: monospace;
+        }
+
+        /* Master Switch */
+        .master-container {
+            background: #ffffff;
+            padding: 16px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 8px;
+            border-left: 4px solid #2196F3;
+        }
+
+        .toggle-input {
+            cursor: pointer;
+            width: 16px;
+            height: 16px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="mainView" class="view active">
+        <div class="header">
+            <h2>Clerk Extension</h2>
+        </div>
+        
+        <div class="master-container">
+            <span class="label-text" style="font-weight: bold;">Enable All Tools</span>
+            <input type="checkbox" id="masterToggle" class="toggle-input">
+        </div>
+
+        <div class="settings-row menu-row" data-target="toolsView">
+            <span class="label-text">Tools</span>
+            <span class="arrow-text">-></span>
+        </div>
+    </div>
+
+    <div id="toolsView" class="view">
+        <div class="header">
+            <button class="back-btn">Back</button>
+            <h2>Tools</h2>
+        </div>
+
+        <div class="section-title">Prospero</div>
+        <div class="settings-row">
+            <span class="label-text">TracKing</span>
+            <input type="checkbox" id="trackingToggle" class="toggle-input">
+        </div>
+        <div class="settings-row">
+            <span class="label-text">Lockdown Reminders</span>
+            <input type="checkbox" id="lockdownToggle" class="toggle-input">
+        </div>
+        <div class="settings-row">
+            <span class="label-text">Close Route Reminders</span>
+            <input type="checkbox" id="closeRouteToggle" class="toggle-input">
+        </div>
+        <div class="settings-row">
+            <span class="label-text">Load Assignment Reminders</span>
+            <input type="checkbox" id="loadAssignToggle" class="toggle-input">
+        </div>
+
+        <div class="section-title">WMS</div>
+        <div class="settings-row">
+            <span class="label-text">Display Batch Count</span>
+            <input type="checkbox" id="batchCountToggle" class="toggle-input">
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>

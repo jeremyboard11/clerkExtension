@@ -1,0 +1,46 @@
+{
+    "manifest_version": 3,
+    "name": "New Clerk Extension",
+    "version": "1.0",
+    "permissions": [
+        "storage",
+        "tabs"
+    ],
+    "action": {
+        "default_popup": "popup.html"
+    },
+    "background": {
+        "service_worker": "background.js"
+    },
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "prospero_sniffer.js",
+                "thermoking_sniffer.js",
+                "sample_data.json",
+                "thermoking_samples.json"
+            ],
+            "matches": [
+                "https://web.prospero.com/*"
+            ]
+        }
+    ],
+    "content_scripts": [
+        {
+            "matches": [
+                "https://web.prospero.com/hyvee/outbound/trip"
+            ],
+            "js": [
+                "prospero.js"
+            ]
+        },
+        {
+            "matches": [
+                "https://web-scraping.dev/product/2"
+            ],
+            "js": [
+                "thermoking.js"
+            ]
+        }
+    ]
+}
