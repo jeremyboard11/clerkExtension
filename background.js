@@ -1,18 +1,14 @@
-/**
- * CLERK EXTENSION - Background Relay Station
- */
-
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     // 1. DIRECTION: Prospero -> Background -> ThermoKing
-    if (message.type === "REQUEST_TEMPS") {
+    if (message.type === "REQUEST_THERMOKING_DATA") {
         console.log("Relaying Request: Prospero -> ThermoKing");
         broadcastToAllTabs(message);
     }
 
     // 2. DIRECTION: ThermoKing -> Background -> Prospero
-    if (message.type === "TEMPS_RESULT") {
-        console.log("Relaying Results: ThermoKing -> Prospero");
+    if (message.type === "THERMOKING_DATA") {
+        console.log("Relaying Results: ThermoKing -> Prospero", message.payload);
         broadcastToAllTabs(message);
     }
 });

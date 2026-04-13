@@ -1,54 +1,128 @@
-/**
- * CLERK EXTENSION - ThermoKing Content Script
- */
+const thermokingCache = {
+    // data
+    trailers: null,
+    // promises
+    trailersReady: null,
+    // resolvers
+    resolveTrailers: null
+};
 
-let tkVehicles = []; // storage for temp data
+// --- main functions ---
 
-function clerkLog(message) {
-    console.log(`Clerk Extension (ThermoKing): ${message}`);
+// Initialize the promises and resolvers
+thermokingCache.trailersReady = new Promise((resolve) => {
+    thermokingCache.resolveTrailers = resolve;
+});
+
+function standardizeTrailerData(data) {
+    // reduce so trailerCode is key
+    return data['aaData'].reduce((acc, trailer) => {
+        const trailerCode = trailer.vehicleName;
+        
+        acc[trailerCode] = {
+            zones: { "nose": trailer.zones[0], "tail": trailer.zones[1] },
+            ambientTemperature: trailer.ambientTemperature,
+            reefer: trailer.reefer,
+            updated: trailer.formattedDataDate,
+            stationary: trailer.stationary,
+            position: trailer.shortPosition,
+            coordinates: { lat: trailer.latitude, lng: trailer.longitude },
+            trailerCode: trailerCode
+        };
+
+        return acc;
+    }, {});
 }
 
-// --- DATA PROCESSING ---
+// process incoming data and store in cache
+function runTKData(payload) {
+    const { type, data } = payload;
+    if (type === 'trailers') {
+        // store trailer data
+        thermokingCache.trailers = standardizeTrailerData(data);
+        // Resolve the trailer promise
+        thermokingCache.resolveTrailers();
 
-function processTKData(data) {
-    tkVehicles = data;
-    clerkLog(`Received data from api for ${tkVehicles.length} trailers.`);
+        console.log("Received thermoking trailer data:", thermokingCache.trailers);
+    }
 }
 
-// --- INITIALIZE ---
+// ------ end main functions ------
 
-function initialize() {
-    // 1. Listen for the Sniffer
+// --- INITIALIZATION ---
+
+async function init() {
+    // load settings
+    const { appSettings } = await chrome.storage.local.get('appSettings');
+    if (!(appSettings && appSettings.scriptsEnabled)) {
+        console.log("Clerk Extension is toggled off.");
+        return;
+    }
+    console.log("Clerk Extension is enabled.");
+
+    // Listen for incoming thermokig data
     window.addEventListener('THERMOKING_DATA_READY', (event) => {
-        processTKData(event.detail);
+        runTKData(event.detail);
     });
 
-    // 2. Listen for the Message from Prospero (Relayed via Background)
+    // Listen for the Message from Prospero (Relayed via Background)
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-        if (message.type === "REQUEST_TEMPS") {
-            
-            // dev - log trailers requested
-            //clerkLog(`Prospero requested temps for: ${message.trailers.join(', ')}`);
-            
-            // 2. Filter local sniffer data (tkVehicles) to find matches
-            const matches = tkVehicles.filter(v => message.trailers.includes(v.vehicleName));
+        if (message.type === "REQUEST_THERMOKING_DATA") {
+            console.log("Data requested for specific trailers:", message.trailers);
 
-            chrome.runtime.sendMessage({
-                type: "TEMPS_RESULT",
-                payload: matches,
-                requestId: message.requestId // SEND THE TOKEN BACK
-            });
+            // Start the async process
+            (async () => {
+                try {
+                    // 1. Wait for the cache to be ready
+                    await thermokingCache.trailersReady;
 
-            clerkLog(`Sending data for ${message.trailers.length} trailers to prospero.`)
+                    console.log("Data ready! Filtering and broadcasting.");
+
+                    // --- FILTERING LOGIC START ---
+                    let filteredData = {};
+
+                    if (Array.isArray(message.trailers) && message.trailers.length > 0) {
+                        // Iterate through the requested trailer codes
+                        message.trailers.forEach(code => {
+                            // Check if this code actually exists in our cache
+                            if (thermokingCache.trailers[code]) {
+                                filteredData[code] = thermokingCache.trailers[code];
+                            } else {
+                                console.warn(`Trailer code ${code} requested but not found in cache.`);
+                            }
+                        });
+                    } else {
+                        // If no specific trailers were requested, you might want to 
+                        // send everything or nothing. Here we send everything as a fallback.
+                        filteredData = thermokingCache.trailers;
+                    }
+                    // --- FILTERING LOGIC END ---
+
+                    // 2. Broadcast the FILTERED data
+                    chrome.runtime.sendMessage({
+                        type: "THERMOKING_DATA",
+                        payload: filteredData // Sending only requested trailers
+                    });
+
+                } catch (error) {
+                    console.error("Error fetching thermoking data:", error);
+                    
+                    chrome.runtime.sendMessage({
+                        type: "THERMOKING_DATA_ERROR",
+                        error: error.message
+                    });
+                }
+            })();
         }
     });
 
-    // 3. Inject the Sniffer
+    // thermoking context
     const script = document.createElement('script');
-    script.src = chrome.runtime.getURL('thermoking_sniffer.js');
-    script.dataset.sampleUrl = chrome.runtime.getURL('thermoking_samples.json');
+    script.src = chrome.runtime.getURL('thermoking-context.js');
+    script.dataset.devThermokingDataUrl = chrome.runtime.getURL('@DEV/dev-thermoking-data.json');
+    script.dataset.appSettings = JSON.stringify(appSettings);
     script.onload = () => script.remove();
     (document.head || document.documentElement).appendChild(script);
 }
 
-initialize();
+init();

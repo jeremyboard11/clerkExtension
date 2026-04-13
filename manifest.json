@@ -6,6 +6,9 @@
         "storage",
         "tabs"
     ],
+    "host_permissions": [
+        "file:///*"
+    ],
     "action": {
         "default_popup": "popup.html"
     },
@@ -15,20 +18,24 @@
     "web_accessible_resources": [
         {
             "resources": [
-                "prospero_sniffer.js",
-                "thermoking_sniffer.js",
-                "sample_data.json",
-                "thermoking_samples.json"
+                "prospero-context.js",
+                "@DEV/dev-prospero-data.json",
+                "@DEV/dev-prospero-routeGroups.json",
+                "@DEV/dev-prospero-trailers.json",
+                "thermoking-context.js",
+                "@DEV/dev-thermoking-data.json"
             ],
             "matches": [
-                "https://web.prospero.com/*"
+                "https://web.prospero.com/*",
+                "file:///*"
             ]
         }
     ],
     "content_scripts": [
         {
             "matches": [
-                "https://web.prospero.com/hyvee/outbound/trip"
+                "https://web.prospero.com/hyvee/outbound/trip",
+                "file:///C:/Users/jerem/OneDrive/Desktop/Work/clerkExtension/@DEV/prospero.html"
             ],
             "js": [
                 "prospero.js"
@@ -36,7 +43,8 @@
         },
         {
             "matches": [
-                "https://web-scraping.dev/product/2"
+                "https://web-scraping.dev/product/2",
+                "file:///C:/Users/jerem/OneDrive/Desktop/Work/clerkExtension/@DEV/thermoking.html"
             ],
             "js": [
                 "thermoking.js"
