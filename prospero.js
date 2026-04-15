@@ -180,7 +180,9 @@ function fetchThermokingData(trailerList, requestId) {
     });
 }
 
-async function checkTrailerTemps(routes, tempRules) {
+async function checkTrailerTemps(routes, appSettings) {
+    let notifications = [];
+
     // filter out unknown trailers
     const trailerList = routes.map(r => r.trailer).filter(code => code && !code.toString().includes('Unknown'));
     
@@ -193,8 +195,42 @@ async function checkTrailerTemps(routes, tempRules) {
         return;
     }
 
-    // Process thermoking data
-    console.log("tempRules:", tempRules);
+    // thermoking data received. loop through routes and check trailer temps
+
+    routes.forEach(route => {
+        if(!route.trailer){return}
+        const issues = [];
+        const trailerData = thermokingData[route.trailer];
+        const requiredTemps = appSettings.tempRules[route.routeGroup.toLowerCase()]
+
+        // notify if trailer is not found in thermoking data
+        if(!trailerData){
+            notifications.push({
+                trailer: route.trailer,
+                route: route.route,
+                door: route.door,
+                errors: ["Trailer "+route.trailer+" was not found in Thermoking"]
+            })
+            return;
+        }
+        console.log("compare nose - set: ",trailerData.zones.nose.setPoint)
+        if(requiredTemps.nose !== null && trailerData.zones.nose.setPoint !== requiredTemps.nose){
+            issues.push(`Nose temp setpoint is ${trailerData.zones.nose.setPoint}°, expected ${requiredTemps.nose}°`);
+        }
+        if (requiredTemps.tail !== null && trailerData.zones.tail.setPoint !== requiredTemps.tail) {
+            issues.push(`Tail temp setpoint is ${trailerData.zones.tail.setPoint}°, expected ${requiredTemps.tail}°`);
+        }
+
+        if (issues.length > 0) {
+            notifications.push({
+                trailer: route.trailer,
+                route: route.route,
+                door: route.door,
+                errors: issues
+            });
+        }
+    });
+    console.log("notifications: ",notifications);
 }
 // ------ end main functions ------
 
@@ -254,7 +290,7 @@ async function runProsperoData(payload, appSettings) {
         console.log("Received listing data:", prosperoCache.routes);
 
         // check trailer temps
-        await checkTrailerTemps(prosperoCache.routes, appSettings.tempRules);
+        await checkTrailerTemps(prosperoCache.routes, appSettings);
     }
 }
 

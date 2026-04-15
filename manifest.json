@@ -35,7 +35,7 @@
         {
             "matches": [
                 "https://web.prospero.com/hyvee/outbound/trip",
-                "file:///C:/Users/jerem/OneDrive/Desktop/Work/clerkExtension/@DEV/prospero.html"
+                "file:///*/@DEV/prospero.html"
             ],
             "js": [
                 "prospero.js"
@@ -44,7 +44,7 @@
         {
             "matches": [
                 "https://web-scraping.dev/product/2",
-                "file:///C:/Users/jerem/OneDrive/Desktop/Work/clerkExtension/@DEV/thermoking.html"
+                "file:///*/@DEV/thermoking.html"
             ],
             "js": [
                 "thermoking.js"

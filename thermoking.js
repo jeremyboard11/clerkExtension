@@ -20,8 +20,21 @@ function standardizeTrailerData(data) {
         const trailerCode = trailer.vehicleName;
         
         acc[trailerCode] = {
-            zones: { "nose": trailer.zones[0], "tail": trailer.zones[1] },
-            ambientTemperature: trailer.ambientTemperature,
+            zones: {
+                "nose": {
+                    setPoint: trailer.zones[0].setPoint ? parseInt(trailer.zones[0].setPoint) : null,
+                    returnAir: trailer.zones[0].returnAir ? parseInt(trailer.zones[0].returnAir) : null,
+                    dischargeAir: trailer.zones[0].dischargeAir ? parseInt(trailer.zones[0].dischargeAir) : null,
+                    active: trailer.zones[0].active ? trailer.zones[0].active : null
+                },
+                "tail": {
+                    setPoint: trailer.zones[1].setPoint ? parseInt(trailer.zones[1].setPoint) : null,
+                    returnAir: trailer.zones[1].returnAir ? parseInt(trailer.zones[1].returnAir) : null,
+                    dischargeAir: trailer.zones[1].dischargeAir ? parseInt(trailer.zones[1].dischargeAir) : null,
+                    active: trailer.zones[1].active ? trailer.zones[1].active : null
+                }
+            },
+            ambientTemperature: trailer.ambientTemperature ? parseInt(trailer.ambientTemperature, 10) : null,
             reefer: trailer.reefer,
             updated: trailer.formattedDataDate,
             stationary: trailer.stationary,
