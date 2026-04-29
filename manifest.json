@@ -27,6 +27,7 @@
             ],
             "matches": [
                 "https://web.prospero.com/*",
+		"https://www.tracking.thermoking.com/*",
                 "file:///*"
             ]
         }
@@ -43,7 +44,7 @@
         },
         {
             "matches": [
-                "https://web-scraping.dev/product/2",
+                "https://www.tracking.thermoking.com/Combo/v2/navigateToTrackAndTrace",
                 "file:///*/@DEV/thermoking.html"
             ],
             "js": [

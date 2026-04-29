@@ -35,6 +35,7 @@ function standardizeTrailerData(data) {
                 }
             },
             ambientTemperature: trailer.ambientTemperature ? parseInt(trailer.ambientTemperature, 10) : null,
+            ignitionStatus: trailer.ignitionStatus,
             reefer: trailer.reefer,
             updated: trailer.formattedDataDate,
             stationary: trailer.stationary,
@@ -48,8 +49,8 @@ function standardizeTrailerData(data) {
 }
 
 // process incoming data and store in cache
-function runTKData(payload) {
-    const { type, data } = payload;
+function runTKData(type, data) {
+    //const { type, data } = payload;
     if (type === 'trailers') {
         // store trailer data
         thermokingCache.trailers = standardizeTrailerData(data);
@@ -75,59 +76,26 @@ async function init() {
 
     // Listen for incoming thermokig data
     window.addEventListener('THERMOKING_DATA_READY', (event) => {
-        runTKData(event.detail);
+        console.log("Received THERMOKING_DATA_READY event:", event.detail);
+        runTKData(event.detail.type, event.detail.response);
     });
 
-    // Listen for the Message from Prospero (Relayed via Background)
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-        if (message.type === "REQUEST_THERMOKING_DATA") {
-            console.log("Data requested for specific trailers:", message.trailers);
-
-            // Start the async process
-            (async () => {
-                try {
-                    // 1. Wait for the cache to be ready
-                    await thermokingCache.trailersReady;
-
-                    console.log("Data ready! Filtering and broadcasting.");
-
-                    // --- FILTERING LOGIC START ---
-                    let filteredData = {};
-
-                    if (Array.isArray(message.trailers) && message.trailers.length > 0) {
-                        // Iterate through the requested trailer codes
-                        message.trailers.forEach(code => {
-                            // Check if this code actually exists in our cache
-                            if (thermokingCache.trailers[code]) {
-                                filteredData[code] = thermokingCache.trailers[code];
-                            } else {
-                                console.warn(`Trailer code ${code} requested but not found in cache.`);
-                            }
-                        });
-                    } else {
-                        // If no specific trailers were requested, you might want to 
-                        // send everything or nothing. Here we send everything as a fallback.
-                        filteredData = thermokingCache.trailers;
-                    }
-                    // --- FILTERING LOGIC END ---
-
-                    // 2. Broadcast the FILTERED data
-                    chrome.runtime.sendMessage({
-                        type: "THERMOKING_DATA",
-                        payload: filteredData // Sending only requested trailers
-                    });
-
-                } catch (error) {
-                    console.error("Error fetching thermoking data:", error);
-                    
-                    chrome.runtime.sendMessage({
-                        type: "THERMOKING_DATA_ERROR",
-                        error: error.message
-                    });
-                }
-            })();
+    // Store all trailers to local storage when ready
+    // Prospero will read directly from storage without message passing
+    (async () => {
+        try {
+            await thermokingCache.trailersReady;
+            console.log("Thermoking data ready. Storing to local storage.");
+            
+            // Store the entire trailer cache to local storage
+            await chrome.storage.local.set({
+                thermokingTrailers: thermokingCache.trailers,
+                thermokingLastUpdate: Date.now()
+            });
+        } catch (error) {
+            console.error("Error storing thermoking data to local storage:", error);
         }
-    });
+    })();
 
     // thermoking context
     const script = document.createElement('script');
