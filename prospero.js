@@ -116,7 +116,7 @@
 
 // ------------ UI HELPER FUNCTIONS ------------
 
-window.renderDock = function({ notifications = [], temperatureMessages = [] } = {}) {
+window.renderDock = function({ newNotifications = [], dismissedNotifications = [], temperatureMessages = [] } = {}) {
     let host = document.getElementById('temp-dock-host');
     let shadow;
 
@@ -168,12 +168,24 @@ window.renderDock = function({ notifications = [], temperatureMessages = [] } = 
             .content-area::-webkit-scrollbar-thumb:hover {
                 background: #888;
             }
-            .item-card { border: 1px solid #777; background-color:#333; padding: 12px; font-size: 13px; border-radius: 8px; margin-bottom: 8px; }
+            .item-card { border: 1px solid #777; background-color:#333; padding: 12px; font-size: 13px; border-radius: 8px; margin-bottom: 8px; display: block; }
             .item-card:hover { background-color: #444; }
-            .header-line { font-weight: bold; color: var(--accent); margin-bottom: 4px; }
+            .item-card[data-type="new"], .item-card[data-type="dismissed"] { display: flex; align-items: center; }
+            .item-card[data-type="dismissed"] { background-color: #2b2b2b; border-color: #555; opacity: 0.85; }
+            .item-card[data-type="dismissed"] .notif-txt { color: #999; font-style: normal; }
+            .item-card[data-type="dismissed"] .dismiss-btn { background: #444; }
+            .temp-card { display: block; }
+            .header-line { font-weight: bold; color: var(--accent); margin-bottom: 8px; }
+            .temp-issues { margin: 8px 0; padding-left: 12px; }
+            .temp-issues .issue-item { margin: 4px 0; font-size: 12px; color: #eee; }
+            .temp-issues .issue-item::before { content: '• '; color: var(--notif); }
             .footer-line { font-size: 11px; color: #aaa; margin-top: 6px; }
             .err-txt { color: var(--err); font-size: 11px; margin-top: 3px; padding-left: 5px; }
-            .notif-txt { color: var(--notif); font-style: italic; }
+            .notif-txt { color: var(--notif); font-style: italic; flex: 1; }
+            .section { margin-bottom: 10px; }
+            .section h4 { margin: 0 0 5px 0; color: var(--accent); font-size: 14px; }
+            .dismiss-btn { margin-left: auto; background: #666; color: white; border: none; padding: 2px 6px; border-radius: 3px; cursor: pointer; font-size: 10px; }
+            .dismiss-btn:hover { background: #888; }
         `;
 
         const dock = document.createElement('div');
@@ -221,26 +233,68 @@ window.renderDock = function({ notifications = [], temperatureMessages = [] } = 
         shadow = host.shadowRoot;
     }
 
+    // Update current state
+    currentNewNotifications = newNotifications;
+    currentDismissedNotifications = dismissedNotifications;
+    currentTemperatureMessages = temperatureMessages;
+
     // --- PARTIAL RE-RENDER LOGIC ---
 
     // 1. Update Badge Counts
-    shadow.querySelector('#count-notif').innerText = notifications.length;
+    shadow.querySelector('#count-notif').innerText = newNotifications.length;
     shadow.querySelector('#count-temp').innerText = temperatureMessages.length;
 
     // 2. Update Notification List
     const notifPanel = shadow.querySelector('#panel-notif');
-    notifPanel.innerHTML = notifications.map(n => `
-        <div class="item-card notif-txt">• ${n}</div>
-    `).join('') || '<div class="item-card">No notifications</div>';
+    notifPanel.innerHTML = `
+        <div class="section">
+            <h4>New Notifications</h4>
+            ${newNotifications.map(n => `
+                <div class="item-card" data-type="new">
+                    <span class="notif-txt">${n}</span>
+                    <button class="dismiss-btn">Dismiss</button>
+                </div>
+            `).join('') || '<div class="item-card">No new notifications</div>'}
+        </div>
+        <div class="section">
+            <h4>Dismissed Notifications</h4>
+            ${dismissedNotifications.map(n => `
+                <div class="item-card" data-type="dismissed">
+                    <span class="notif-txt">${n}</span>
+                </div>
+            `).join('') || '<div class="item-card">No dismissed notifications</div>'}
+        </div>
+    `;
+
+    // Add dismiss event listeners
+    notifPanel.querySelectorAll('.dismiss-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const card = e.target.closest('.item-card');
+            const text = card.querySelector('.notif-txt').textContent.replace('• ', '').trim();
+            const type = card.dataset.type;
+            if (type === 'new') {
+                currentNewNotifications.splice(currentNewNotifications.indexOf(text), 1);
+                currentDismissedNotifications.unshift(text);
+            } else {
+                currentDismissedNotifications.splice(currentDismissedNotifications.indexOf(text), 1);
+            }
+            chrome.storage.local.set({ dismissedNotifications: currentDismissedNotifications });
+            renderDock({
+                newNotifications: currentNewNotifications,
+                dismissedNotifications: currentDismissedNotifications,
+                temperatureMessages: currentTemperatureMessages
+            });
+        });
+    });
 
     // 3. Update Temperature List (Formatted: Trailer > Route > Door)
     const tempPanel = shadow.querySelector('#panel-temp');
     tempPanel.innerHTML = temperatureMessages.map(item => `
-        <div class="item-card">
-            <div class="header-line">
-                Trailer: ${item.trailer} | Route: ${item.route} | Door: ${item.door} | Route Group: ${item.routeGroup}
+        <div class="item-card temp-card">
+            <div class="header-line">Trailer: ${item.trailer} | Route: ${item.route} | Door: ${item.door} | Route Group: ${item.routeGroup}</div>
+            <div class="temp-issues">
+                ${((item.errors || []).length ? (item.errors || []).map(err => `<div class="issue-item">${err}</div>`).join('') : '<div class="issue-item">No issues found.</div>')}
             </div>
-            ${item.errors.map(err => `<div class="err-txt">${err}</div>`).join('')}
             <div class="footer-line">Last Updated: ${item.updated ? new Date(item.updated).toLocaleString() : 'N/A'}</div>
             <div class="footer-line">Location: ${item.position || 'N/A'}</div>
         </div>
@@ -248,6 +302,10 @@ window.renderDock = function({ notifications = [], temperatureMessages = [] } = 
 };
 
 // ------------ Data Cache and State Management ------------
+
+let currentNewNotifications = [];
+let currentDismissedNotifications = [];
+let currentTemperatureMessages = [];
 
 const prosperoCache = {
     // --- ACTUAL DATA ---
@@ -290,6 +348,16 @@ function logStyled(message, type = "success") {
 }
 
 function standardizeRoutes(routes) {
+    const formatTime = (isoString) => {
+        if (!isoString) return "";
+        const date = new Date(isoString);
+        const month = date.getMonth() + 1;
+        const day = date.getDate();
+        const hours = date.getHours().toString().padStart(2, '0');
+        const minutes = date.getMinutes().toString().padStart(2, '0');
+        return `${month}/${day} ${hours}:${minutes}`;
+    };
+
     return routes.map(route => ({
         route: route.routeNum,
         shipment: route.customField03,
@@ -297,134 +365,171 @@ function standardizeRoutes(routes) {
         door: route.trailer1DoorNum,
         trailer: prosperoCache.trailers[route.trailer1OutId]?.code || "",
         plannedDispatchDate: route.plannedDispatchDate,
+        displayedDispatchDate: formatTime(route.plannedDispatchDate),
         tripId: route.tripId,
         deliverySequence: route.deliverySequence,
     }));
 }
 
-async function fetchThermokingData(trailerList) {
-    if (trailerList.length === 0) return Promise.resolve({});
+async function processRoutes(routes, appSettings) {
+    const doorUsage = {};
+    const repeatedDoors = new Set();
 
-    // Try to get thermoking data from local storage
-    const { thermokingTrailers, thermokingLastUpdate } = await chrome.storage.local.get(['thermokingTrailers', 'thermokingLastUpdate']);
-    
+    let generalNotifications = [];
+    let tempNotifications = [];
+
+    // Load Yard and Thermoking data from chrome local storage
+    const { yardTrailers, thermokingTrailers, thermokingLastUpdate, yardLastUpdate } = await chrome.storage.local.get(['yardTrailers', 'thermokingTrailers', 'thermokingLastUpdate', 'yardLastUpdate']);
+
+    // Verify thermoking data
     if (!thermokingTrailers) {
         logStyled("Thermoking data not available in local storage.", "warning");
-        return {};
-    }else{
-        // Format the timestamp
-        const lastUpdateTime = new Date(thermokingLastUpdate).toLocaleTimeString();
-        logStyled(`Thermoking data loaded from local storage (Last updated: ${lastUpdateTime})`, "success");
-    }
-
-    // Filter for requested trailers
-    let filteredData = {};
-    trailerList.forEach(code => {
-        if (thermokingTrailers[code]) {
-            // add requested trailer data to filteredData object
-            filteredData[code] = thermokingTrailers[code];
-        } else {
-            logStyled(`Trailer code ${code} not found in thermoking data.`, "warning");
-        }
-    });
-
-    // return data for requested trailers only
-    return filteredData;
-}
-
-async function checkTrailerTemps(routes, appSettings) {
-    let notifications = [];
-
-    logStyled("Checking trailer temps for " + routes.length + " routes.", "default");
-
-    // filter out unknown trailers
-    const trailerList = routes.map(r => r.trailer).filter(code => code && !code.toString().includes('Unknown'));
-    
-    let thermokingData;
-    try {
-        // fetch thermoking data from session storage
-        thermokingData = await fetchThermokingData(trailerList);
-    } catch (error) {
-        console.error("Error fetching Thermoking data:", error);
         return;
+    }else{
+        const thermokingLastUpdateTime = new Date(thermokingLastUpdate).toLocaleString();
+        logStyled(`Thermoking data loaded from local storage (Last updated: ${thermokingLastUpdateTime})`, "success");
     }
 
-    // thermoking data received. loop through routes and check trailer temps
+    // Verify yard data
+    if (!yardTrailers) {
+        logStyled("Yard data not available in local storage. All trailers will be processed without yard context.", "warning");
+        return;
+    }else{
+        const yardLastUpdateTime = new Date(yardLastUpdate).toLocaleString();
+        logStyled(`Yard data loaded from local storage (Last updated: ${yardLastUpdateTime})`, "success");
+    }
 
+    // Loop through routes
     routes.forEach(route => {
+        
+        const trailerData = thermokingTrailers[route.trailer];
+        const requiredTemps = appSettings.tempRules[route.routeGroup.toLowerCase()];
+        const yardPad = yardTrailers[route.trailer]?.pad ?? "Not in Yard";
+        let trailerInDoor = false;
+        
         // Skip routes with no trailer assigned
-        if (!route.trailer) {
-            return;
-        }
-
-        const trailerData = thermokingData[route.trailer];
-        const requiredTemps = appSettings.tempRules[route.routeGroup.toLowerCase()]
-
-        // Skip routes with no temp rules defined
+        if (!route.trailer) {return;}
+        
+        // Skip routes with no door assigned
+        if (!route.door) {return;}
+        
+        // Is trailer in final door? (if yard data is available)
+        if (yardPad == route.door) {trailerInDoor = true;}
+        
+        // Skip routes with no temp rules defined (If it's not a PDIFRSH, PDIFRZ or MIX route)
         if (!requiredTemps) {return;}
-
-        const issues = [];
-
-        // notify if trailer is not found in thermoking data
+        
+        // If no thermoking data for the trailer, add a notification
         if(!trailerData){
-            notifications.push({
+            tempNotifications.push({
                 trailer: route.trailer,
                 route: route.route,
                 door: route.door,
                 routeGroup: route.routeGroup,
-                errors: ["Trailer "+route.trailer+" was not found in Thermoking"]
-            })
-            return;
-        }
-
-        // Safely access nose setpoint, use "?" if not found
-        const noseSetPoint = trailerData?.zones?.nose?.setPoint;
-        const noseActive = trailerData?.zones?.nose?.active;
-
-        // trailer ignition off
-        if(trailerData.ignitionStatus === "Off"){
-            issues.push(`Trailer ignition is off, expected On`);
-        }
-        
-        if (requiredTemps.nose !== null && !noseActive) {
-            issues.push(`Nose reefer is not running, expected ${requiredTemps.nose}°`);
-        } else if (requiredTemps.nose !== null && noseSetPoint === undefined) {
-            issues.push(`Nose temp setpoint was not found, expected ${requiredTemps.nose}°`);
-        } else if (requiredTemps.nose !== null && noseSetPoint !== requiredTemps.nose) {
-            issues.push(`Nose temp setpoint is ${noseSetPoint}°, expected ${requiredTemps.nose}°`);
-        }
-
-        // Safely access tail setpoint, use "?" if not found
-        const tailSetPoint = trailerData?.zones?.tail?.setPoint;
-        const tailActive = trailerData?.zones?.tail?.active;
-        
-        if (requiredTemps.tail !== null && !tailActive) {
-            issues.push(`Tail reefer is not running, expected ${requiredTemps.tail}°`);
-        } else if (requiredTemps.tail !== null && tailSetPoint === undefined) {
-            issues.push(`Tail temp setpoint was not found, expected ${requiredTemps.tail}°`);
-        } else if (requiredTemps.tail !== null && tailSetPoint !== requiredTemps.tail) {
-            issues.push(`Tail temp setpoint is ${tailSetPoint}°, expected ${requiredTemps.tail}°`);
-        }
-
-        if (issues.length > 0) {
-            notifications.push({
-                trailer: route.trailer,
-                route: route.route,
-                door: route.door,
-                routeGroup: route.routeGroup,
-                errors: issues,
-                updated: trailerData.updated,
-                position: trailerData.position
+                errors: ["Trailer " + route.trailer + " was not found in Thermoking"]
             });
         }
+        
+        // -------- Check trailer temperature ---------
+        if(trailerData && trailerInDoor){
+            console.log("Processing trailer " + route.trailer + " on route " + route.route + " with door " + route.door);
+            const issues = [];
+            const noseSetPoint = trailerData?.zones?.nose?.setPoint;
+            const noseActive = trailerData?.zones?.nose?.active;
+            const tailSetPoint = trailerData?.zones?.tail?.setPoint;
+            const tailActive = trailerData?.zones?.tail?.active;
+
+            // check ignition status
+            if(trailerData.ignitionStatus === "Off"){
+                issues.push(`Trailer ignition is off, expected On`);
+            }
+
+            // check nose temps
+            if (requiredTemps.nose !== null && !noseActive) {
+                issues.push(`Nose reefer is not running, expected ${requiredTemps.nose}°`);
+            } else if (requiredTemps.nose !== null && noseSetPoint === undefined) {
+                issues.push(`Nose temp setpoint was not found, expected ${requiredTemps.nose}°`);
+            } else if (requiredTemps.nose !== null && noseSetPoint !== requiredTemps.nose) {
+                issues.push(`Nose temp setpoint is ${noseSetPoint}°, expected ${requiredTemps.nose}°`);
+            }
+            // check tail temps
+            if (requiredTemps.tail !== null && !tailActive) {
+                issues.push(`Tail reefer is not running, expected ${requiredTemps.tail}°`);
+            } else if (requiredTemps.tail !== null && tailSetPoint === undefined) {
+                issues.push(`Tail temp setpoint was not found, expected ${requiredTemps.tail}°`);
+            } else if (requiredTemps.tail !== null && tailSetPoint !== requiredTemps.tail) {
+                issues.push(`Tail temp setpoint is ${tailSetPoint}°, expected ${requiredTemps.tail}°`);
+            }
+
+            // push to tempNotifications if any issues found
+            if (issues.length > 0) {
+                tempNotifications.push({
+                    trailer: route.trailer,
+                    route: route.route,
+                    door: route.door,
+                    routeGroup: route.routeGroup,
+                    errors: issues,
+                    updated: trailerData.updated,
+                    position: trailerData.position
+                });
+            }
+        }
+
+        // Add to door usage map for general notifications (e.g. repeated use of same door)
+        const routeTime = Date.parse(route.plannedDispatchDate);
+        if (!doorUsage[route.door]) {
+            doorUsage[route.door] = [];
+        }
+        doorUsage[route.door].push({ route: route.route, time: routeTime });
+        if (doorUsage[route.door].length > 1) {
+            repeatedDoors.add(route.door);
+        }
+
     });
 
-    // Update dock UI with notifications and temp issues
-    console.log("notifications: ",notifications);
+    // Check for repeated door usage and add to general notifications
+    repeatedDoors.forEach(door => {
+        const entries = doorUsage[door].slice().sort((a, b) => a.time - b.time);
+        const sequence = [];
+
+        for (let i = 0; i < entries.length; i++) {
+            sequence.push(entries[i].route);
+            if (i < entries.length - 1) {
+                const gapHours = Math.round((entries[i + 1].time - entries[i].time) / 3600000);
+                sequence.push(`${gapHours}h`);
+            }
+        }
+
+        generalNotifications.push(`Door ${door} is repeated: ${sequence.join(' > ')}`);
+    });
+
+
+    console.log("repeated doors:", doorUsage);
+    console.log("Temperature issue notifications:", tempNotifications);
+
+    // Clean up dismissed notifications that are no longer relevant
+    currentDismissedNotifications = currentDismissedNotifications.filter(notif => {
+        if (!notif.startsWith('Door ')) return true; // keep non-door notifications
+        const parts = notif.split(' is repeated: ');
+        if (parts.length !== 2) return true;
+        const door = parts[0].replace('Door ', '');
+        const sequence = parts[1].split(' > ');
+        const routes = sequence.filter(s => !s.endsWith('h')).map(s => s.trim());
+        // Check if all routes are still assigned to this door
+        const currentRoutesForDoor = doorUsage[door] ? doorUsage[door].map(e => e.route) : [];
+        return routes.every(r => currentRoutesForDoor.includes(r));
+    });
+
+    // Update storage with cleaned dismissed notifications
+    chrome.storage.local.set({ dismissedNotifications: currentDismissedNotifications });
+
+    currentNewNotifications = generalNotifications.filter(n => !currentDismissedNotifications.includes(n));
+    currentTemperatureMessages = tempNotifications;
 
     renderDock({
-        notifications: ["System Maintenance at 5 PM", "New Route Assigned"],
-        temperatureMessages: notifications
+        newNotifications: currentNewNotifications,
+        dismissedNotifications: currentDismissedNotifications,
+        temperatureMessages: currentTemperatureMessages
     });
 
 }
@@ -518,7 +623,7 @@ async function runProsperoData(type, data, appSettings) {
         console.log("Received listing data:", prosperoCache.routes);
 
         // check trailer temps
-        await checkTrailerTemps(prosperoCache.routes, appSettings);
+        await processRoutes(prosperoCache.routes, appSettings);
     }
 }
 
@@ -530,6 +635,10 @@ async function init() {
         return;
     }
     console.log("Clerk Extension is enabled.", appSettings);
+
+    // load dismissed notifications
+    const { dismissedNotifications: storedDismissed } = await chrome.storage.local.get('dismissedNotifications');
+    currentDismissedNotifications = storedDismissed || [];
 
     // listen for incoming prospero data (trailers, listing, etc)
     window.addEventListener('PROSPERO_DATA_READY', (event) => {

@@ -107700,18 +107700,18 @@
             "vehicleColour": "blue",
             "zones": [
                 {
-                    "returnAir": "14.8",
-                    "dischargeAir": "31.4",
+                    "returnAir": "28",
+                    "dischargeAir": "13.5",
                     "spare": "",
-                    "setPoint": "-18",
+                    "setPoint": "26",
                     "active": true,
                     "configured": true
                 },
                 {
-                    "returnAir": "35.2",
-                    "dischargeAir": "28.5",
+                    "returnAir": "27.6",
+                    "dischargeAir": "14.3",
                     "spare": "",
-                    "setPoint": "32",
+                    "setPoint": "26",
                     "active": true,
                     "configured": true
                 },

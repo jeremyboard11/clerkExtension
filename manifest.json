@@ -27,7 +27,7 @@
             ],
             "matches": [
                 "https://web.prospero.com/*",
-		"https://www.tracking.thermoking.com/*",
+		        "https://www.tracking.thermoking.com/*",
                 "file:///*"
             ]
         }
@@ -40,6 +40,15 @@
             ],
             "js": [
                 "prospero.js"
+            ]
+        },
+        {
+            "matches": [
+                "*://*/YardViewer/LocateTrailer.aspx",
+                "file:///*/@DEV/locateTrailer.html"
+            ],
+            "js": [
+                "yard.js"
             ]
         },
         {
