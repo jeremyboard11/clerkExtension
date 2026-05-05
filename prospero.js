@@ -398,17 +398,28 @@ async function processRoutes(routes, appSettings) {
         // Skip routes with no temp rules defined (If it's not a PDIFRSH, PDIFRZ or MIX route)
         if (!requiredTemps) {return;}
         
-        // If no thermoking data for the trailer, add a general notification
+        // ------------ Notify of missing thermoking data for trailer ------------
         if( route.trailer && !trailerData){
             generalNotifications.push(`No trailer temp data available for trailer ${route.trailer} on route ${route.route} (door ${route.door}).`);
         }
 
-        // Notify of Fast and Fresh routes
+        // ------------ Notify of Fast and Fresh routes ------------
         if(route.deliverySequence.includes(" FF")){
             generalNotifications.push(`Route ${route.route} is a Fast and Fresh route. Use liftgate at B03 - B06.`);
         }
-        
-        // -------- Check trailer temperature ---------
+
+        // ------------ Notify route lockdown time (within 2 hours of planned dispatch) ------------
+        if (route.plannedDispatchDate) {
+            const plannedDispatchTime = new Date(route.plannedDispatchDate);
+            const now = new Date();
+            const timeDiff = (plannedDispatchTime - now) / (1000 * 60 * 60); // in hours
+
+            if (timeDiff >= 0 && timeDiff <= 2) {
+                generalNotifications.push(`Lock down ${route.route}. Planned dispatch: ${route.displayedDispatchDate}`);
+            }
+        }
+
+        // -------- Notify of incorrect trailer temp setpoints ---------
         if(trailerData && trailerInDoor && route.trailer && route.door){
             const issues = [];
             const noseSetPoint = trailerData?.zones?.nose?.setPoint;
@@ -466,7 +477,7 @@ async function processRoutes(routes, appSettings) {
 
     });
 
-    // Check for common delivery sequences within +-4 doors (ANKENY1 is staged at B15 and B17)
+    // ------- Notify of common stores staged too close together (within +-4 doors) (ex. ANKENY1 on 2 different routes is staged at B15 and B17) -------
     const routeSequences = routes.filter(r => r.door).map(r => ({
         route: r.route,
         door: r.door,
@@ -489,7 +500,7 @@ async function processRoutes(routes, appSettings) {
         }
     }
 
-    // Check for repeated door usage
+    // ---- Notify of doors that are booked multiple times (ex. B12 is used for 3 different routes) ----
     repeatedDoors.forEach(door => {
         const entries = doorUsage[door].slice().sort((a, b) => a.time - b.time);
         const routeEntries = entries.map(entry => ({
