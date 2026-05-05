@@ -129,7 +129,7 @@ window.renderDock = function({ newNotifications = [], dismissedNotifications = [
 
         const style = document.createElement('style');
         style.textContent = `
-            :host { --bg: #222; --accent: #eee; --text: #333; --err: #ff5c4d; --notif: #ffcc00; }
+            :host { --bg: #222; --accent: #DDD; --text: #999; --err: #ff5c4d; --notif: #ffcc00; }
             #dock {
                 position: fixed; top: 20px; right: 20px; z-index: 2147483647;
                 background: var(--bg); color: var(--text); border-radius: 12px;
@@ -174,18 +174,21 @@ window.renderDock = function({ newNotifications = [], dismissedNotifications = [
             .item-card[data-type="dismissed"] { background-color: #2b2b2b; border-color: #555; opacity: 0.85; }
             .item-card[data-type="dismissed"] .notif-txt { color: #999; font-style: normal; }
             .item-card[data-type="dismissed"] .dismiss-btn { background: #444; }
+            .item-card.caughtup { font-style: italic; text-align: center; font-size: 16px; border: none; background: none; margin: 40px 0;}
             .temp-card { display: block; }
-            .header-line { font-weight: bold; color: var(--accent); margin-bottom: 8px; }
-            .temp-issues { margin: 8px 0; padding-left: 12px; }
-            .temp-issues .issue-item { margin: 4px 0; font-size: 12px; color: #eee; }
-            .temp-issues .issue-item::before { content: '• '; color: var(--notif); }
-            .footer-line { font-size: 11px; color: #aaa; margin-top: 6px; }
+            .primary-info { display: flex; justify-content: space-between; font-size: 16px; font-weight: bold; color: var(--accent); margin-bottom: 8px; }
+            .secondary-info { font-size: 14px; color: #ccc; margin-bottom: 8px; }
+            .temp-issues { margin: 8px 0; }
+            .temp-issues .issue-item { margin: 4px 0; font-size: 13px; color: var(--notif); font-weight: bold; }
+            .temp-issues .issue-item::before { content: '⚠ '; }
+            .footer-info { font-size: 11px; color: #aaa; margin-top: 8px; }
+            .footer-info div { margin: 2px 0; }
             .err-txt { color: var(--err); font-size: 11px; margin-top: 3px; padding-left: 5px; }
             .notif-txt { color: var(--notif); font-style: italic; flex: 1; }
             .section { margin-bottom: 10px; }
             .section h4 { margin: 0 0 5px 0; color: var(--accent); font-size: 14px; }
-            .dismiss-btn { margin-left: auto; background: #666; color: white; border: none; padding: 2px 6px; border-radius: 3px; cursor: pointer; font-size: 10px; }
-            .dismiss-btn:hover { background: #888; }
+            .dismiss-btn { margin-left: 4px; background: none; color: #DDD; border: none; padding: 12px; cursor: pointer; font-size: 14px; }
+            .dismiss-btn:hover { background: rgba(255, 255, 255, 0.1); }
         `;
 
         const dock = document.createElement('div');
@@ -256,7 +259,7 @@ window.renderDock = function({ newNotifications = [], dismissedNotifications = [
                     <span class="notif-txt">${n}</span>
                     <button class="dismiss-btn">Dismiss</button>
                 </div>
-            `).join('') || '<div class="item-card">No new notifications</div>'}
+            `).join('') || '<div class="item-card caughtup">No new notifications</div>'}
         </div>
         <div class="section">
             <h4>Dismissed Notifications</h4>
@@ -296,12 +299,18 @@ window.renderDock = function({ newNotifications = [], dismissedNotifications = [
     const tempPanel = shadow.querySelector('#panel-temp');
     tempPanel.innerHTML = temperatureMessages.map(item => `
         <div class="item-card temp-card">
-            <div class="header-line">Trailer: ${item.trailer} | Route: ${item.route} | Door: ${item.door} | Route Group: ${item.routeGroup}</div>
+            <div class="primary-info">
+                <span>Trailer: ${item.trailer}</span>
+                <span>Door: ${item.door}</span>
+            </div>
+            <div class="secondary-info">Route: ${item.route} | Route Group: ${item.routeGroup}</div>
             <div class="temp-issues">
                 ${((item.errors || []).length ? (item.errors || []).map(err => `<div class="issue-item">${err}</div>`).join('') : '<div class="issue-item">No issues found.</div>')}
             </div>
-            <div class="footer-line">Last Updated: ${item.updated ? new Date(item.updated).toLocaleString() : 'N/A'}</div>
-            <div class="footer-line">Location: ${item.position || 'N/A'}</div>
+            <div class="footer-info">
+                <div>Last Updated: ${item.updated ? new Date(item.updated).toLocaleString() : 'N/A'}</div>
+                <div>Location: ${item.position || 'N/A'}</div>
+            </div>
         </div>
     `).join('') || '<div class="item-card">No temperature issues</div>';
 };
@@ -450,7 +459,7 @@ async function processRoutes(routes, appSettings) {
         // Skip routes with no temp rules defined (If it's not a PDIFRSH, PDIFRZ or MIX route)
         if (!requiredTemps) {return;}
         
-        // If no thermoking data for the trailer, add a general notification instead of a temp issue
+        // If no thermoking data for the trailer, add a general notification
         if(!trailerData){
             generalNotifications.push(`Thermoking data missing for trailer ${route.trailer} on route ${route.route} (door ${route.door}).`);
         }
@@ -641,9 +650,10 @@ async function runProsperoData(type, data, appSettings) {
         
         // standardize and store route data
         prosperoCache.routes = standardizeRoutes(data);
-        console.log("Received listing data:", prosperoCache.routes);
 
-        // check trailer temps
+        appSettings.devMode ? console.log("Received listing data:", prosperoCache.routes) : null;
+
+        // Process routes
         await processRoutes(prosperoCache.routes, appSettings);
     }
 }
@@ -655,7 +665,7 @@ async function init() {
         console.log("Clerk Extension is toggled off.");
         return;
     }
-    console.log("Clerk Extension is enabled.", appSettings);
+    console.log("Clerk Extension is enabled.", appSettings.devMode ? appSettings : "Live mode");
 
     // load dismissed notifications
     const { dismissedNotifications: storedDismissed } = await chrome.storage.local.get('dismissedNotifications');
