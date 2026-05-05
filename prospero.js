@@ -393,25 +393,24 @@ async function processRoutes(routes, appSettings) {
         const yardPad = yardTrailers[route.trailer]?.pad ?? "Not in Yard";
         let trailerInDoor = false;
         
-        // Skip routes with no trailer assigned
-        if (!route.trailer) {return;}
-        
-        // Skip routes with no door assigned
-        if (!route.door) {return;}
-        
-        // Is trailer in final door? (if yard data is available)
-        if (yardPad == route.door) {trailerInDoor = true;}
-        
         // Skip routes with no temp rules defined (If it's not a PDIFRSH, PDIFRZ or MIX route)
         if (!requiredTemps) {return;}
         
+        // Is trailer in door?
+        if (yardPad == route.door) {trailerInDoor = true;}
+        
         // If no thermoking data for the trailer, add a general notification
-        if(!trailerData){
+        if( route.trailer && !trailerData){
             generalNotifications.push(`No trailer temp data available for trailer ${route.trailer} on route ${route.route} (door ${route.door}).`);
+        }
+
+        // Notify of Fast and Fresh routes
+        if(route.deliverySequence.includes(" FF")){
+            generalNotifications.push(`Route ${route.route} is a Fast and Fresh route. Use liftgate at B03 - B06.`);
         }
         
         // -------- Check trailer temperature ---------
-        if(trailerData && trailerInDoor){
+        if(trailerData && trailerInDoor && route.trailer && route.door){
             const issues = [];
             const noseSetPoint = trailerData?.zones?.nose?.setPoint;
             const noseActive = trailerData?.zones?.nose?.active;
@@ -455,13 +454,15 @@ async function processRoutes(routes, appSettings) {
         }
 
         // Add to door usage map for general notifications (repeated use of same door)
-        const routeTime = Date.parse(route.plannedDispatchDate);
-        if (!doorUsage[route.door]) {
-            doorUsage[route.door] = [];
-        }
-        doorUsage[route.door].push({ route: route.route, time: routeTime });
-        if (doorUsage[route.door].length > 1) {
-            repeatedDoors.add(route.door);
+        if(route.door){
+            const routeTime = Date.parse(route.plannedDispatchDate);
+            if (!doorUsage[route.door]) {
+                doorUsage[route.door] = [];
+            }
+            doorUsage[route.door].push({ route: route.route, time: routeTime });
+            if (doorUsage[route.door].length > 1) {
+                repeatedDoors.add(route.door);
+            }
         }
 
     });
