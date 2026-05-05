@@ -136,12 +136,12 @@
         </div>
         
         <div class="master-container">
-            <span class="label-text" style="font-weight: bold;">Enable All Tools</span>
+            <span class="label-text" style="font-weight: bold;">Enable Clerk Extension</span>
             <input type="checkbox" id="masterToggle" class="toggle-input">
         </div>
 
-        <div class="settings-row menu-row" data-target="toolsView">
-            <span class="label-text">Tools</span>
+        <div class="settings-row menu-row" data-target="settingsView">
+            <span class="label-text">Settings</span>
             <span class="arrow-text">-></span>
         </div>
 
@@ -198,10 +198,10 @@
     </div>
 
 
-    <div id="toolsView" class="view">
+    <div id="settingsView" class="view">
         <div class="header">
             <button class="back-btn">Back</button>
-            <h2>Tools</h2>
+            <h2>Settings</h2>
         </div>
 
         <div class="section-title">Prospero</div>
@@ -214,12 +214,28 @@
             <input type="checkbox" id="lockdownToggle" class="toggle-input">
         </div>
         <div class="settings-row">
+            <span class="label-text">Door Double Booked Reminders</span>
+            <input type="checkbox" id="repeatedDoorsToggle" class="toggle-input">
+        </div>
+        <div class="settings-row">
+            <span class="label-text">Common Stores Staged Too Close Reminders</span>
+            <input type="checkbox" id="commonStoresToggle" class="toggle-input">
+        </div>
+        <div class="settings-row">
+            <span class="label-text">F&F Door Reminders</span>
+            <input type="checkbox" id="ffDoorToggle" class="toggle-input">
+        </div>
+        <div class="settings-row">
             <span class="label-text">Close Route Reminders</span>
             <input type="checkbox" id="closeRouteToggle" class="toggle-input">
         </div>
         <div class="settings-row">
             <span class="label-text">Load Assignment Reminders</span>
             <input type="checkbox" id="loadAssignToggle" class="toggle-input">
+        </div>
+        <div class="settings-row">
+            <span class="label-text">Notification Snooze Duration<br>(in minutes)</span>
+            <input type="number" id="notificationSnoozeMinutes" class="rule-input" min="1" max="10" step="1">
         </div>
 
         <div class="section-title">WMS</div>

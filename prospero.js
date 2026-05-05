@@ -1,6 +1,6 @@
 // ------------ UI HELPER FUNCTIONS ------------
 
-window.renderDock = function({ newNotifications = [], dismissedNotifications = [], temperatureMessages = [] } = {}) {
+window.renderDock = function({ newNotifications = [], dismissedNotifications = [], snoozedNotifications = [], temperatureMessages = [] } = {}) {
     let host = document.getElementById('temp-dock-host');
     let shadow;
 
@@ -19,6 +19,7 @@ window.renderDock = function({ newNotifications = [], dismissedNotifications = [
                 background: var(--bg); color: var(--text); border-radius: 12px;
                 box-shadow: 0 4px 15px rgba(0,0,0,0.3); padding: 10px;
                 font-family: system-ui, sans-serif; cursor: grab; width: fit-content;
+                width: 360px; max-width: 90vw;
             }
             .btn-row { display: flex; gap: 10px; }
             button {
@@ -32,7 +33,7 @@ window.renderDock = function({ newNotifications = [], dismissedNotifications = [
                 padding: 1px 6px; border-radius: 10px; min-width: 10px; text-align: center;
             }
             .content-area { 
-                max-height: 400px; overflow-y: auto; display: none; margin-top: 10px; width: 340px; 
+                max-height: 400px; overflow-y: auto; display: none; margin-top: 10px;
             }
             .content-area::-webkit-scrollbar {
                 width: 10px;
@@ -81,8 +82,8 @@ window.renderDock = function({ newNotifications = [], dismissedNotifications = [
             .notif-txt.repeatDoor { font-size: 20px; }
             .section { margin-bottom: 10px; }
             .section h4 { margin: 0 0 5px 0; color: var(--accent); font-size: 14px; }
-            .dismiss-btn { margin-left: 4px; background: none; color: #DDD; border: none; padding: 12px; cursor: pointer; font-size: 14px; }
-            .dismiss-btn:hover { background: rgba(255, 255, 255, 0.1); }
+            .snooze-btn, .dismiss-btn { margin-left: 4px; background: none; color: #DDD; border: none; padding: 12px; cursor: pointer; font-size: 14px; }
+            .snooze-btn:hover, .dismiss-btn:hover { background: rgba(255, 255, 255, 0.1); }
         `;
 
         const dock = document.createElement('div');
@@ -141,7 +142,9 @@ window.renderDock = function({ newNotifications = [], dismissedNotifications = [
     const notifBadge = shadow.querySelector('#count-notif');
     notifBadge.innerText = newNotifications.length;
     notifBadge.style.display = newNotifications.length ? 'inline-flex' : 'none';
-    shadow.querySelector('#count-temp').innerText = temperatureMessages.length;
+    const tempBadge = shadow.querySelector('#count-temp');
+    tempBadge.innerText = temperatureMessages.length;
+    tempBadge.style.display = temperatureMessages.length ? 'inline-flex' : 'none';
 
     // 2. Update Notification List
     const notifPanel = shadow.querySelector('#panel-notif');
@@ -150,6 +153,7 @@ window.renderDock = function({ newNotifications = [], dismissedNotifications = [
             <h4>New Notifications</h4>
             ${newNotifications.map(n => {
                 const text = getNotificationText(n);
+                // -------- Door repeat notifications -----------
                 if (n?.type === 'doorRepeat') {
                     return `
                         <div class="item-card door-repeat-card" data-type="new">
@@ -173,6 +177,16 @@ window.renderDock = function({ newNotifications = [], dismissedNotifications = [
                         </div>
                     `;
                 }
+                // ---------- Snoozable notifications ----------
+                if (n?.type === 'snoozable') {
+                    return `
+                        <div class="item-card" data-type="new">
+                            <span class="notif-txt">${text}</span>
+                            <button class="snooze-btn">Snooze</button>
+                            <button class="dismiss-btn">Dismiss</button>
+                        </div>
+                    `;
+                }
                 return `
                     <div class="item-card" data-type="new">
                         <span class="notif-txt">${text}</span>
@@ -180,6 +194,20 @@ window.renderDock = function({ newNotifications = [], dismissedNotifications = [
                     </div>
                 `;
             }).join('') || '<div class="item-card caughtup">No new notifications</div>'}
+        </div>
+        <div class="section">
+            <h4>Snoozed Notifications</h4>
+            ${snoozedNotifications.map(s => {
+                const text = getNotificationText(s.notification);
+                const snoozeTime = new Date(s.snoozeAt).toLocaleString();
+                return `
+                    <div class="item-card" data-type="snoozed">
+                        <span class="notif-txt">${text}</span>
+                        <button class="dismiss-btn">Dismiss</button>
+                        <div class="footer-info">Snoozed at: ${snoozeTime}</div>
+                    </div>
+                `;
+            }).join('') || '<div class="item-card">No snoozed notifications</div>'}
         </div>
         <div class="section">
             <h4>Dismissed Notifications</h4>
@@ -203,6 +231,13 @@ window.renderDock = function({ newNotifications = [], dismissedNotifications = [
                     currentNewNotifications.splice(index, 1);
                 }
                 currentDismissedNotifications.unshift({ text, dismissedAt: Date.now() });
+            } else if (type === 'snoozed') {
+                const index = currentSnoozedNotifications.findIndex(entry => getNotificationText(entry.notification) === text);
+                if (index !== -1) {
+                    currentSnoozedNotifications.splice(index, 1);
+                }
+                currentDismissedNotifications.unshift({ text, dismissedAt: Date.now() });
+                chrome.storage.local.set({ snoozedNotifications: currentSnoozedNotifications });
             } else {
                 currentDismissedNotifications = currentDismissedNotifications.filter(entry => getNotificationText(entry) !== text);
             }
@@ -210,8 +245,34 @@ window.renderDock = function({ newNotifications = [], dismissedNotifications = [
             renderDock({
                 newNotifications: currentNewNotifications,
                 dismissedNotifications: currentDismissedNotifications,
+                snoozedNotifications: currentSnoozedNotifications,
                 temperatureMessages: currentTemperatureMessages
             });
+        });
+    });
+
+    // Add snooze event listeners
+    notifPanel.querySelectorAll('.snooze-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const card = e.target.closest('.item-card');
+            const text = card.querySelector('.notif-txt').textContent.replace('• ', '').trim();
+            const index = currentNewNotifications.findIndex(entry => getNotificationText(entry) === text);
+            if (index !== -1) {
+                const notification = currentNewNotifications.splice(index, 1)[0];
+                const snoozeDuration = (currentAppSettings.prospero_notificationSnoozeMinutes || 5) * 60 * 1000;
+                currentSnoozedNotifications.push({
+                    notification,
+                    snoozeAt: Date.now(),
+                    snoozeUntil: Date.now() + snoozeDuration
+                });
+                chrome.storage.local.set({ snoozedNotifications: currentSnoozedNotifications });
+                renderDock({
+                    newNotifications: currentNewNotifications,
+                    dismissedNotifications: currentDismissedNotifications,
+                    snoozedNotifications: currentSnoozedNotifications,
+                    temperatureMessages: currentTemperatureMessages
+                });
+            }
         });
     });
 
@@ -239,7 +300,9 @@ window.renderDock = function({ newNotifications = [], dismissedNotifications = [
 
 let currentNewNotifications = [];
 let currentDismissedNotifications = [];
+let currentSnoozedNotifications = [];
 let currentTemperatureMessages = [];
+let currentAppSettings = {};
 
 function getNotificationText(notification) {
     if (typeof notification === 'string') return notification;
@@ -345,6 +408,7 @@ function standardizeRoutes(routes) {
         trailer: prosperoCache.trailers[route.trailer1OutId]?.code || "",
         plannedDispatchDate: route.plannedDispatchDate,
         displayedDispatchDate: formatTime(route.plannedDispatchDate),
+        readyTime: route.trailer1ReadyTime,
         tripId: route.tripId,
         deliverySequence: route.deliverySequence,
     }));
@@ -359,6 +423,10 @@ async function processRoutes(routes, appSettings) {
 
     // Load Yard and Thermoking data from chrome local storage
     const { yardTrailers, thermokingTrailers, thermokingLastUpdate, yardLastUpdate } = await chrome.storage.local.get(['yardTrailers', 'thermokingTrailers', 'thermokingLastUpdate', 'yardLastUpdate']);
+
+    // Load snoozed notifications
+    const { snoozedNotifications: storedSnoozed } = await chrome.storage.local.get('snoozedNotifications');
+    currentSnoozedNotifications = storedSnoozed || [];
 
     // Verify thermoking data
     if (!thermokingTrailers) {
@@ -398,29 +466,60 @@ async function processRoutes(routes, appSettings) {
         // Skip routes with no temp rules defined (If it's not a PDIFRSH, PDIFRZ or MIX route)
         if (!requiredTemps) {return;}
         
-        // ------------ Notify of missing thermoking data for trailer ------------
-        if( route.trailer && !trailerData){
-            generalNotifications.push(`No trailer temp data available for trailer ${route.trailer} on route ${route.route} (door ${route.door}).`);
-        }
-
         // ------------ Notify of Fast and Fresh routes ------------
-        if(route.deliverySequence.includes(" FF")){
+        if(appSettings.prospero_ffDoorReminders && route.deliverySequence.includes(" FF")){
             generalNotifications.push(`Route ${route.route} is a Fast and Fresh route. Use liftgate at B03 - B06.`);
         }
-
+        
         // ------------ Notify route lockdown time (within 2 hours of planned dispatch) ------------
-        if (route.plannedDispatchDate) {
+        if (appSettings.prospero_lockdownReminders && route.plannedDispatchDate) {
             const plannedDispatchTime = new Date(route.plannedDispatchDate);
             const now = new Date();
             const timeDiff = (plannedDispatchTime - now) / (1000 * 60 * 60); // in hours
-
+            const notificationText = `Lock down route ${route.route}. Planned dispatch: ${route.displayedDispatchDate}`;
+            
             if (timeDiff >= 0 && timeDiff <= 2) {
-                generalNotifications.push(`Lock down ${route.route}. Planned dispatch: ${route.displayedDispatchDate}`);
+                // Check if this exact notification is already snoozed or already in notifications
+                if (!currentSnoozedNotifications.some(s => s.notification.route === route.route && s.notification.text === notificationText) &&
+                !generalNotifications.some(n => n.route === route.route && n.text === notificationText)) {
+                    generalNotifications.push({
+                        type: 'snoozable',
+                        text: notificationText,
+                        route: route.route,
+                        plannedDispatch: route.plannedDispatchDate
+                    });
+                }
             }
         }
 
+        // ------------ Notify route closing time (within 30 minutes of planned dispatch) ------------
+        if (appSettings.prospero_closeRouteReminders && !route.readyTime) {
+            const plannedDispatchTime = new Date(route.plannedDispatchDate);
+            const now = new Date();
+            const timeDiff = (plannedDispatchTime - now) / (1000 * 60); // in minutes
+            const notificationText = `Close route ${route.route}. Planned dispatch: ${route.displayedDispatchDate}`;
+            
+            if (timeDiff >= -600 && timeDiff <= 30) {
+                // Check if this exact notification is already snoozed or already in notifications
+                if (!currentSnoozedNotifications.some(s => s.notification.route === route.route && s.notification.text === notificationText) &&
+                !generalNotifications.some(n => n.route === route.route && n.text === notificationText)) {
+                    generalNotifications.push({
+                        type: 'snoozable',
+                        text: notificationText,
+                        route: route.route,
+                        plannedDispatch: route.plannedDispatchDate
+                    });
+                }
+            }
+        }
+        
+        // ------------ Notify of missing thermoking data for trailer ------------
+        if(appSettings.prospero_tracking && route.trailer && !trailerData){
+            generalNotifications.push(`No trailer temp data available for trailer ${route.trailer} on route ${route.route} (door ${route.door}).`);
+        }
+
         // -------- Notify of incorrect trailer temp setpoints ---------
-        if(trailerData && trailerInDoor && route.trailer && route.door){
+        if(appSettings.prospero_tracking && trailerData && trailerInDoor && route.trailer && route.door){
             const issues = [];
             const noseSetPoint = trailerData?.zones?.nose?.setPoint;
             const noseActive = trailerData?.zones?.nose?.active;
@@ -478,50 +577,54 @@ async function processRoutes(routes, appSettings) {
     });
 
     // ------- Notify of common stores staged too close together (within +-4 doors) (ex. ANKENY1 on 2 different routes is staged at B15 and B17) -------
-    const routeSequences = routes.filter(r => r.door).map(r => ({
-        route: r.route,
-        door: r.door,
-        doorLetter: r.door[0],
-        doorNum: parseInt(r.door.slice(1)),
-        sequence: r.deliverySequence.split('|').map(s => s.trim()).filter(s => s !== 'PDI'),
-        plannedDispatchDate: r.plannedDispatchDate
-    }));
+    if(appSettings.prospero_commonStoresPriximity){
+        const routeSequences = routes.filter(r => r.door).map(r => ({
+            route: r.route,
+            door: r.door,
+            doorLetter: r.door[0],
+            doorNum: parseInt(r.door.slice(1)),
+            sequence: r.deliverySequence.split('|').map(s => s.trim()).filter(s => s !== 'PDI'),
+            plannedDispatchDate: r.plannedDispatchDate
+        }));
 
-    for (let i = 0; i < routeSequences.length; i++) {
-        for (let j = i + 1; j < routeSequences.length; j++) {
-            const r1 = routeSequences[i];
-            const r2 = routeSequences[j];
-            if (r1.doorLetter === r2.doorLetter && Math.abs(r1.doorNum - r2.doorNum) <= 3 && Math.abs(Date.parse(r1.plannedDispatchDate) - Date.parse(r2.plannedDispatchDate)) <= 5 * 60 * 60 * 1000) {
-                const common = r1.sequence.filter(s => r2.sequence.includes(s));
-                if (common.length > 0) {
-                    generalNotifications.push(`[${r1.route} at ${r1.door}] and [${r2.route} at ${r2.door}] both stop at: ${common.join(', ')}. Pickers will mix batches and they will be harder to load.`);
+        for (let i = 0; i < routeSequences.length; i++) {
+            for (let j = i + 1; j < routeSequences.length; j++) {
+                const r1 = routeSequences[i];
+                const r2 = routeSequences[j];
+                if (r1.doorLetter === r2.doorLetter && Math.abs(r1.doorNum - r2.doorNum) <= 3 && Math.abs(Date.parse(r1.plannedDispatchDate) - Date.parse(r2.plannedDispatchDate)) <= 5 * 60 * 60 * 1000) {
+                    const common = r1.sequence.filter(s => r2.sequence.includes(s));
+                    if (common.length > 0) {
+                        generalNotifications.push(`[${r1.route} at ${r1.door}] and [${r2.route} at ${r2.door}] both stop at: ${common.join(', ')}. Pickers will mix batches and they will be harder to load.`);
+                    }
                 }
             }
         }
     }
 
     // ---- Notify of doors that are booked multiple times (ex. B12 is used for 3 different routes) ----
-    repeatedDoors.forEach(door => {
-        const entries = doorUsage[door].slice().sort((a, b) => a.time - b.time);
-        const routeEntries = entries.map(entry => ({
-            route: entry.route,
-            shipment: entry.shipment || '',
-            time: entry.time,
-            formattedTime: formatDispatchTime(entry.time)
-        }));
-        const bookingLabel = entries.length === 2 ? 'double booked'
-            : entries.length === 3 ? 'triple booked'
-            : entries.length === 4 ? 'quadruple booked'
-            : `${entries.length}x booked`;
+    if(appSettings.prospero_repeatedDoors){
+        repeatedDoors.forEach(door => {
+            const entries = doorUsage[door].slice().sort((a, b) => a.time - b.time);
+            const routeEntries = entries.map(entry => ({
+                route: entry.route,
+                shipment: entry.shipment || '',
+                time: entry.time,
+                formattedTime: formatDispatchTime(entry.time)
+            }));
+            const bookingLabel = entries.length === 2 ? 'double booked'
+                : entries.length === 3 ? 'triple booked'
+                : entries.length === 4 ? 'quadruple booked'
+                : `${entries.length}x booked`;
 
-        generalNotifications.push({
-            type: 'doorRepeat',
-            door,
-            count: entries.length,
-            header: `${door} is ${bookingLabel}`,
-            routeEntries
+            generalNotifications.push({
+                type: 'doorRepeat',
+                door,
+                count: entries.length,
+                header: `${door} is ${bookingLabel}`,
+                routeEntries
+            });
         });
-    });
+    }
 
     // Clean up dismissed notifications that are no longer relevant (user changed a door that was double booked)
     currentDismissedNotifications = currentDismissedNotifications.filter(notif => {
@@ -545,12 +648,25 @@ async function processRoutes(routes, appSettings) {
     // Update storage with cleaned dismissed notifications
     chrome.storage.local.set({ dismissedNotifications: currentDismissedNotifications });
 
+    // Check snoozed notifications and move any expired ones back to general notifications
+    const currentTime = Date.now();
+    currentSnoozedNotifications = currentSnoozedNotifications.filter(snoozed => {
+        if (currentTime > snoozed.snoozeUntil) {
+            generalNotifications.unshift(snoozed.notification);
+            return false; // remove from snoozed
+        }
+        return true;
+    });
+    // Save updated snoozed
+    chrome.storage.local.set({ snoozedNotifications: currentSnoozedNotifications });
+
     currentNewNotifications = generalNotifications.filter(n => !currentDismissedNotifications.some(entry => getNotificationText(entry) === getNotificationText(n)));
     currentTemperatureMessages = tempNotifications;
 
     renderDock({
         newNotifications: currentNewNotifications,
         dismissedNotifications: currentDismissedNotifications,
+        snoozedNotifications: currentSnoozedNotifications,
         temperatureMessages: currentTemperatureMessages
     });
 
@@ -653,6 +769,7 @@ async function runProsperoData(type, data, appSettings) {
 async function init() {
     // load settings
     const { appSettings } = await chrome.storage.local.get('appSettings');
+    currentAppSettings = appSettings;
     if (!(appSettings && appSettings.scriptsEnabled)) {
         console.log("Clerk Extension is toggled off.");
         return;
@@ -663,6 +780,11 @@ async function init() {
     const { dismissedNotifications: storedDismissed } = await chrome.storage.local.get('dismissedNotifications');
     currentDismissedNotifications = normalizeDismissedNotifications(storedDismissed);
     chrome.storage.local.set({ dismissedNotifications: currentDismissedNotifications });
+
+    // load snoozed notifications
+    const { snoozedNotifications: storedSnoozed } = await chrome.storage.local.get('snoozedNotifications');
+    currentSnoozedNotifications = storedSnoozed || [];
+    chrome.storage.local.set({ snoozedNotifications: currentSnoozedNotifications });
 
     // listen for incoming prospero data (trailers, listing, etc)
     window.addEventListener('PROSPERO_DATA_READY', (event) => {

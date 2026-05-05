@@ -2,16 +2,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const views = document.querySelectorAll('.view');
     const menuRows = document.querySelectorAll('.menu-row');
     const backButtons = document.querySelectorAll('.back-btn');
+    const snoozeInput = document.getElementById("notificationSnoozeMinutes");
 
     // 1. Standard Toggles Configuration
     const toggles = {
         masterToggle: 'scriptsEnabled',
         trackingToggle: 'prospero_tracking',
-        lockdownToggle: 'prospero_lockdown',
-        closeRouteToggle: 'prospero_closeRoute',
+        lockdownToggle: 'prospero_lockdownReminders',
+        closeRouteToggle: 'prospero_closeRouteReminders',
         loadAssignToggle: 'prospero_loadAssign',
         batchCountToggle: 'wms_batchCount',
-        devModeToggle: 'devMode'
+        devModeToggle: 'devMode',
+        ffDoorToggle: 'prospero_ffDoorReminders',
+        commonStoresToggle: 'prospero_commonStoresPriximity',
+        repeatedDoorsToggle: 'prospero_repeatedDoors'
     };
 
     // 2. Rules Input Configuration (mapping ID to the nested object path)
@@ -42,8 +46,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Default temp rules
     const DEFAULT_RULES = {
-        mix: { nose: -18, tail: 35 },
-        pdifrsh: { nose: 35, tail: null },
+        mix: { nose: -18, tail: 32 },
+        pdifrsh: { nose: 32, tail: null },
         pdifrz: { nose: -18, tail: null }
     };
 
@@ -76,6 +80,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     element.value = (val === null || val === undefined) ? '' : val;
                 }
             });
+
+            const snoozeElement = document.getElementById('notificationSnoozeMinutes');
+            if (snoozeElement) {
+                const snoozeValue = settings.prospero_notificationSnoozeMinutes;
+                snoozeElement.value = (snoozeValue === null || snoozeValue === undefined)
+                    ? 3
+                    : snoozeValue;
+            }
         });
     }
 
@@ -101,7 +113,13 @@ document.addEventListener('DOMContentLoaded', () => {
             tempRules[inputCfg.group][inputCfg.key] = val;
         });
 
-        // 3. Nest tempRules inside allSettings
+        // 3. Add numeric settings
+        const snoozeElement = document.getElementById('notificationSnoozeMinutes');
+        allSettings.prospero_notificationSnoozeMinutes = snoozeElement && snoozeElement.value !== ''
+            ? parseInt(snoozeElement.value, 10)
+            : 3;
+
+        // 4. Nest tempRules inside allSettings
         allSettings.tempRules = tempRules;
 
         // 4. Save the single object
@@ -128,6 +146,19 @@ document.addEventListener('DOMContentLoaded', () => {
             element.addEventListener('change', saveSettings);
         }
     });
+
+    // Event Listener for Snooze Duration
+    snoozeInput.addEventListener("input", () => {
+        let value = parseInt(snoozeInput.value, 10);
+
+        if (value > 10) snoozeInput.value = 10;
+        if (value < 1) snoozeInput.value = 1;
+    });
+
+    const snoozeElement = document.getElementById('notificationSnoozeMinutes');
+    if (snoozeElement) {
+        snoozeElement.addEventListener('change', saveSettings);
+    }
 
     window.addEventListener('beforeunload', saveSettings);
 });
