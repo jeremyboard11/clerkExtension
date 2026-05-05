@@ -241,7 +241,9 @@ window.renderDock = function({ newNotifications = [], dismissedNotifications = [
     // --- PARTIAL RE-RENDER LOGIC ---
 
     // 1. Update Badge Counts
-    shadow.querySelector('#count-notif').innerText = newNotifications.length;
+    const notifBadge = shadow.querySelector('#count-notif');
+    notifBadge.innerText = newNotifications.length;
+    notifBadge.style.display = newNotifications.length ? 'inline-flex' : 'none';
     shadow.querySelector('#count-temp').innerText = temperatureMessages.length;
 
     // 2. Update Notification List
@@ -260,7 +262,7 @@ window.renderDock = function({ newNotifications = [], dismissedNotifications = [
             <h4>Dismissed Notifications</h4>
             ${dismissedNotifications.map(n => `
                 <div class="item-card" data-type="dismissed">
-                    <span class="notif-txt">${n}</span>
+                    <span class="notif-txt">${getNotificationText(n)}</span>
                 </div>
             `).join('') || '<div class="item-card">No dismissed notifications</div>'}
         </div>
@@ -273,10 +275,13 @@ window.renderDock = function({ newNotifications = [], dismissedNotifications = [
             const text = card.querySelector('.notif-txt').textContent.replace('• ', '').trim();
             const type = card.dataset.type;
             if (type === 'new') {
-                currentNewNotifications.splice(currentNewNotifications.indexOf(text), 1);
-                currentDismissedNotifications.unshift(text);
+                const index = currentNewNotifications.indexOf(text);
+                if (index !== -1) {
+                    currentNewNotifications.splice(index, 1);
+                }
+                currentDismissedNotifications.unshift({ text, dismissedAt: Date.now() });
             } else {
-                currentDismissedNotifications.splice(currentDismissedNotifications.indexOf(text), 1);
+                currentDismissedNotifications = currentDismissedNotifications.filter(entry => getNotificationText(entry) !== text);
             }
             chrome.storage.local.set({ dismissedNotifications: currentDismissedNotifications });
             renderDock({
@@ -306,6 +311,23 @@ window.renderDock = function({ newNotifications = [], dismissedNotifications = [
 let currentNewNotifications = [];
 let currentDismissedNotifications = [];
 let currentTemperatureMessages = [];
+
+function getNotificationText(notification) {
+    return typeof notification === 'string' ? notification : notification?.text || '';
+}
+
+function normalizeDismissedNotifications(entries) {
+    if (!Array.isArray(entries)) return [];
+    return entries.map(entry => {
+        if (typeof entry === 'string') {
+            return { text: entry, dismissedAt: Date.now() };
+        }
+        return {
+            text: entry?.text || '',
+            dismissedAt: entry?.dismissedAt || Date.now()
+        };
+    }).filter(entry => entry.text);
+}
 
 const prosperoCache = {
     // --- ACTUAL DATA ---
@@ -399,7 +421,16 @@ async function processRoutes(routes, appSettings) {
         logStyled(`Yard data loaded from local storage (Last updated: ${yardLastUpdateTime})`, "success");
     }
 
-    // Loop through routes
+    // Clear dismissed notifications that are 10 hours or older
+    const now = Date.now();
+    const retentionMs = 10 * 60 * 60 * 1000;
+    currentDismissedNotifications = currentDismissedNotifications.filter(entry => {
+        const dismissedAt = entry?.dismissedAt || now;
+        return now - dismissedAt < retentionMs;
+    });
+    chrome.storage.local.set({ dismissedNotifications: currentDismissedNotifications });
+
+    // --------------------- Loop through routes -----------------------
     routes.forEach(route => {
         
         const trailerData = thermokingTrailers[route.trailer];
@@ -419,20 +450,13 @@ async function processRoutes(routes, appSettings) {
         // Skip routes with no temp rules defined (If it's not a PDIFRSH, PDIFRZ or MIX route)
         if (!requiredTemps) {return;}
         
-        // If no thermoking data for the trailer, add a notification
+        // If no thermoking data for the trailer, add a general notification instead of a temp issue
         if(!trailerData){
-            tempNotifications.push({
-                trailer: route.trailer,
-                route: route.route,
-                door: route.door,
-                routeGroup: route.routeGroup,
-                errors: ["Trailer " + route.trailer + " was not found in Thermoking"]
-            });
+            generalNotifications.push(`Thermoking data missing for trailer ${route.trailer} on route ${route.route} (door ${route.door}).`);
         }
         
         // -------- Check trailer temperature ---------
         if(trailerData && trailerInDoor){
-            console.log("Processing trailer " + route.trailer + " on route " + route.route + " with door " + route.door);
             const issues = [];
             const noseSetPoint = trailerData?.zones?.nose?.setPoint;
             const noseActive = trailerData?.zones?.nose?.active;
@@ -475,7 +499,7 @@ async function processRoutes(routes, appSettings) {
             }
         }
 
-        // Add to door usage map for general notifications (e.g. repeated use of same door)
+        // Add to door usage map for general notifications (repeated use of same door)
         const routeTime = Date.parse(route.plannedDispatchDate);
         if (!doorUsage[route.door]) {
             doorUsage[route.door] = [];
@@ -503,14 +527,11 @@ async function processRoutes(routes, appSettings) {
         generalNotifications.push(`Door ${door} is repeated: ${sequence.join(' > ')}`);
     });
 
-
-    console.log("repeated doors:", doorUsage);
-    console.log("Temperature issue notifications:", tempNotifications);
-
-    // Clean up dismissed notifications that are no longer relevant
+    // Clean up dismissed notifications that are no longer relevant (user changed a door that was double booked)
     currentDismissedNotifications = currentDismissedNotifications.filter(notif => {
-        if (!notif.startsWith('Door ')) return true; // keep non-door notifications
-        const parts = notif.split(' is repeated: ');
+        const text = getNotificationText(notif);
+        if (!text.startsWith('Door ')) return true; // keep non-door notifications
+        const parts = text.split(' is repeated: ');
         if (parts.length !== 2) return true;
         const door = parts[0].replace('Door ', '');
         const sequence = parts[1].split(' > ');
@@ -523,7 +544,7 @@ async function processRoutes(routes, appSettings) {
     // Update storage with cleaned dismissed notifications
     chrome.storage.local.set({ dismissedNotifications: currentDismissedNotifications });
 
-    currentNewNotifications = generalNotifications.filter(n => !currentDismissedNotifications.includes(n));
+    currentNewNotifications = generalNotifications.filter(n => !currentDismissedNotifications.some(entry => getNotificationText(entry) === n));
     currentTemperatureMessages = tempNotifications;
 
     renderDock({
@@ -638,7 +659,8 @@ async function init() {
 
     // load dismissed notifications
     const { dismissedNotifications: storedDismissed } = await chrome.storage.local.get('dismissedNotifications');
-    currentDismissedNotifications = storedDismissed || [];
+    currentDismissedNotifications = normalizeDismissedNotifications(storedDismissed);
+    chrome.storage.local.set({ dismissedNotifications: currentDismissedNotifications });
 
     // listen for incoming prospero data (trailers, listing, etc)
     window.addEventListener('PROSPERO_DATA_READY', (event) => {
