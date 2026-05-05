@@ -335,11 +335,13 @@ function standardizeRoutes(routes) {
         return `${month}/${day} ${hours}:${minutes}`;
     };
 
+    const cleanDoor = (str) => str?.replace(/[A-Za-z]+$/, '') || "";
+
     return routes.map(route => ({
         route: route.routeNum,
         shipment: route.customField03,
         routeGroup: prosperoCache.routeGroups[route.siteRouteGroupId],
-        door: route.trailer1DoorNum,
+        door: cleanDoor(route.trailer1DoorNum),
         trailer: prosperoCache.trailers[route.trailer1OutId]?.code || "",
         plannedDispatchDate: route.plannedDispatchDate,
         displayedDispatchDate: formatTime(route.plannedDispatchDate),
@@ -466,6 +468,29 @@ async function processRoutes(routes, appSettings) {
         }
 
     });
+
+    // Check for common delivery sequences within +-4 doors with the same letter
+    const routeSequences = routes.filter(r => r.door).map(r => ({
+        route: r.route,
+        door: r.door,
+        doorLetter: r.door[0],
+        doorNum: parseInt(r.door.slice(1)),
+        sequence: r.deliverySequence.split('|').map(s => s.trim()).filter(s => s !== 'PDI'),
+        plannedDispatchDate: r.plannedDispatchDate
+    }));
+
+    for (let i = 0; i < routeSequences.length; i++) {
+        for (let j = i + 1; j < routeSequences.length; j++) {
+            const r1 = routeSequences[i];
+            const r2 = routeSequences[j];
+            if (r1.doorLetter === r2.doorLetter && Math.abs(r1.doorNum - r2.doorNum) <= 3 && Math.abs(Date.parse(r1.plannedDispatchDate) - Date.parse(r2.plannedDispatchDate)) <= 5 * 60 * 60 * 1000) {
+                const common = r1.sequence.filter(s => r2.sequence.includes(s));
+                if (common.length > 0) {
+                    generalNotifications.push(`[${r1.route} at ${r1.door}] and [${r2.route} at ${r2.door}] both stop at: ${common.join(', ')}. Pickers will mix batches and they will be harder to load.`);
+                }
+            }
+        }
+    }
 
     // Check for repeated door usage and add to general notifications
     repeatedDoors.forEach(door => {
