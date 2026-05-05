@@ -1,119 +1,3 @@
-// /**
-//  * CLERK EXTENSION - Prospero Content Script
-//  */
-
-// let routes = [];
-// let tkVehicles = [];
-// let trailerMap = new Map();
-// let currentRequestId = 0; // Token to track the latest request
-
-// function clerkLog(message) {
-//     console.log(`Clerk Extension (Prospero): ${message}`);
-// }
-
-// // --- DATA STORAGE ---
-
-// function storeTrailers(trailerArray) {
-//     trailerMap.clear();
-//     trailerArray.forEach(t => trailerMap.set(t.trailerId, t.trailerCode));
-//     clerkLog(`Mapped ${trailerMap.size} trailers.`);
-// }
-
-// function getTrailerCode(id) {
-//     return trailerMap.get(id) || `Unknown (${id})`;
-// }
-
-// // --- CORE PROCESSOR ---
-
-// function compareRouteTrailerTemps(){
-//     if(routes && tkVehicles){
-//         // compare trailers in prospero to thermoking data. alert user if trailer temps are set incorrectly.
-//         routes.forEach(row => {
-//             // TODO: find out if theres a xhr request for route group id reference table
-//             if(row.siteRouteGroupId == 58){
-//                 console.log("mix")
-//             }
-//         })
-//     }
-// }
-
-// function processProsperoData(payload) {
-//     const { type, data } = payload;
-
-//     if (type === 'trailers') {
-//         storeTrailers(data);
-//     }
-
-//     if (type === 'listing') {
-//         console.clear();
-//         routes = data;
-//         clerkLog(`Updated: ${routes.length} routes.`);
-
-//         // Request temps immediately when listing updates
-//         fetchTrailerTemps();
-//     }
-// }
-
-// // --- THERMOKING INTEGRATION ---
-
-// function fetchTrailerTemps() {
-//     const trailerList = routes
-//         .map(trip => getTrailerCode(trip.trailer1OutId))
-//         .filter(code => code && !code.toString().includes('Unknown'));
-
-//     if (trailerList.length === 0) return;
-
-//     // Increment ID so we only care about THIS specific request
-//     currentRequestId = Date.now();
-
-//     chrome.runtime.sendMessage({
-//         type: "REQUEST_TEMPS",
-//         trailers: trailerList,
-//         requestId: currentRequestId // Attach the token
-//     });
-
-//     clerkLog(`Requesting temps (ID: ${currentRequestId}) for ${trailerList.length} trailers.`);
-// }
-
-// // --- INITIALIZE ---
-
-// function initialize() {
-//     chrome.storage.sync.get(['scriptsEnabled'], (settings) => {
-//         if (settings.scriptsEnabled === false) return;
-
-//         chrome.runtime.onMessage.addListener((message) => {
-//             if (message.type === "TEMPS_RESULT") {
-//                 // IGNORE CHECK: If this result is for an old request, discard it
-//                 if (message.requestId !== currentRequestId) {
-//                     clerkLog(`Discarded stale response (ID: ${message.requestId})`);
-//                     return;
-//                 }
-
-//                 tkVehicles = message.payload;
-//                 clerkLog(`Temps received for ${tkVehicles.length} units (Match: ${message.requestId}).`);
-
-//                 //verify trailer temps are set correctly after prospero ('listing') and thermoking ('getData') are received
-//                 compareRouteTrailerTemps(routes, tkVehicles);
-//             }
-//         });
-
-//         // Fetch trailer tamps at interval
-//         // setInterval(fetchTrailerTemps, 10000);
-
-//         window.addEventListener('PROSPERO_DATA_READY', (event) => {
-//             processProsperoData(event.detail);
-//         });
-
-//         const script = document.createElement('script');
-//         script.src = chrome.runtime.getURL('prospero_sniffer.js');
-//         script.dataset.sampleUrl = chrome.runtime.getURL('sample_data.json');
-//         script.onload = () => script.remove();
-//         (document.head || document.documentElement).appendChild(script);
-//     });
-// }
-
-// initialize();
-
 // ------------ UI HELPER FUNCTIONS ------------
 
 window.renderDock = function({ newNotifications = [], dismissedNotifications = [], temperatureMessages = [] } = {}) {
@@ -171,9 +55,18 @@ window.renderDock = function({ newNotifications = [], dismissedNotifications = [
             .item-card { border: 1px solid #777; background-color:#333; padding: 12px; font-size: 13px; border-radius: 8px; margin-bottom: 8px; display: block; }
             .item-card:hover { background-color: #444; }
             .item-card[data-type="new"], .item-card[data-type="dismissed"] { display: flex; align-items: center; }
-            .item-card[data-type="dismissed"] { background-color: #2b2b2b; border-color: #555; opacity: 0.85; }
-            .item-card[data-type="dismissed"] .notif-txt { color: #999; font-style: normal; }
+            .item-card[data-type="dismissed"] { background-color: #2b2b2b; border-color: #555; opacity: 0.85; align-items: center; }
+            .item-card[data-type="dismissed"] .notif-txt { color: #999; font-style: normal; flex-grow: 1; text-align:center; }
             .item-card[data-type="dismissed"] .dismiss-btn { background: #444; }
+            .door-repeat-card { flex-direction: column; align-items: stretch; }
+            .repeat-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+            .repeat-item { display: flex; flex-direction: column; gap: 4px; padding: 6px 0; border-top: 1px solid #444; }
+            .repeat-item:first-child { border-top: none; }
+            .repeat-route { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+            .repeat-route-id { font-size: 15px; font-weight: 700; color: #FFF; }
+            .repeat-route-time { font-size: 13px; color: #ccc; }
+            .repeat-separator { text-align: center; color: #888; font-size: 14px; }
+            .repeat-gap { text-align: center; font-size: 13px; color: #ccc; font-weight: 600; }
             .item-card.caughtup { font-style: italic; text-align: center; font-size: 16px; border: none; background: none; margin: 40px 0;}
             .temp-card { display: block; }
             .primary-info { display: flex; justify-content: space-between; font-size: 16px; font-weight: bold; color: var(--accent); margin-bottom: 8px; }
@@ -184,7 +77,8 @@ window.renderDock = function({ newNotifications = [], dismissedNotifications = [
             .footer-info { font-size: 11px; color: #aaa; margin-top: 8px; }
             .footer-info div { margin: 2px 0; }
             .err-txt { color: var(--err); font-size: 11px; margin-top: 3px; padding-left: 5px; }
-            .notif-txt { color: var(--notif); font-style: italic; flex: 1; }
+            .notif-txt { color: var(--notif); flex: 1; }
+            .notif-txt.repeatDoor { font-size: 20px; }
             .section { margin-bottom: 10px; }
             .section h4 { margin: 0 0 5px 0; color: var(--accent); font-size: 14px; }
             .dismiss-btn { margin-left: 4px; background: none; color: #DDD; border: none; padding: 12px; cursor: pointer; font-size: 14px; }
@@ -254,12 +148,38 @@ window.renderDock = function({ newNotifications = [], dismissedNotifications = [
     notifPanel.innerHTML = `
         <div class="section">
             <h4>New Notifications</h4>
-            ${newNotifications.map(n => `
-                <div class="item-card" data-type="new">
-                    <span class="notif-txt">${n}</span>
-                    <button class="dismiss-btn">Dismiss</button>
-                </div>
-            `).join('') || '<div class="item-card caughtup">No new notifications</div>'}
+            ${newNotifications.map(n => {
+                const text = getNotificationText(n);
+                if (n?.type === 'doorRepeat') {
+                    return `
+                        <div class="item-card door-repeat-card" data-type="new">
+                            <div class="notif-txt repeatDoor">${text}</div>
+                            <div class="repeat-list">
+                                ${n.routeEntries.map((entry, idx) => `
+                                    <div class="repeat-item">
+                                        <div class="repeat-route">
+                                            <span class="repeat-route-id">${entry.route}</span>
+                                            <span class="repeat-route-time">${entry.formattedTime}</span>
+                                        </div>
+                                        ${idx < n.routeEntries.length - 1 ? `
+                                            <div class="repeat-separator">•</div>
+                                            <div class="repeat-gap">${Math.round(((n.routeEntries[idx + 1].time - entry.time) / 3600000) * 2) / 2}h</div>
+                                            <div class="repeat-separator">•</div>
+                                        ` : ''}
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <button class="dismiss-btn">Dismiss</button>
+                        </div>
+                    `;
+                }
+                return `
+                    <div class="item-card" data-type="new">
+                        <span class="notif-txt">${text}</span>
+                        <button class="dismiss-btn">Dismiss</button>
+                    </div>
+                `;
+            }).join('') || '<div class="item-card caughtup">No new notifications</div>'}
         </div>
         <div class="section">
             <h4>Dismissed Notifications</h4>
@@ -278,7 +198,7 @@ window.renderDock = function({ newNotifications = [], dismissedNotifications = [
             const text = card.querySelector('.notif-txt').textContent.replace('• ', '').trim();
             const type = card.dataset.type;
             if (type === 'new') {
-                const index = currentNewNotifications.indexOf(text);
+                const index = currentNewNotifications.findIndex(entry => getNotificationText(entry) === text);
                 if (index !== -1) {
                     currentNewNotifications.splice(index, 1);
                 }
@@ -322,7 +242,12 @@ let currentDismissedNotifications = [];
 let currentTemperatureMessages = [];
 
 function getNotificationText(notification) {
-    return typeof notification === 'string' ? notification : notification?.text || '';
+    if (typeof notification === 'string') return notification;
+    if (!notification) return '';
+    if (typeof notification.text === 'string' && notification.text) return notification.text;
+    if (typeof notification.header === 'string' && notification.header) return notification.header;
+    if (notification.type === 'doorRepeat' && notification.header) return notification.header;
+    return '';
 }
 
 function normalizeDismissedNotifications(entries) {
@@ -331,11 +256,32 @@ function normalizeDismissedNotifications(entries) {
         if (typeof entry === 'string') {
             return { text: entry, dismissedAt: Date.now() };
         }
-        return {
-            text: entry?.text || '',
+
+        const base = {
+            text: entry?.text || entry?.header || '',
             dismissedAt: entry?.dismissedAt || Date.now()
         };
+
+        if (entry?.type === 'doorRepeat') {
+            base.type = 'doorRepeat';
+            base.header = entry.header;
+            base.door = entry.door;
+            base.count = entry.count;
+            base.routeEntries = entry.routeEntries;
+        }
+
+        return base;
     }).filter(entry => entry.text);
+}
+
+function formatDispatchTime(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    const hours = `${date.getHours()}`.padStart(2, '0');
+    const minutes = `${date.getMinutes()}`.padStart(2, '0');
+    return `${month}/${day} ${hours}:${minutes}`;
 }
 
 const prosperoCache = {
@@ -461,7 +407,7 @@ async function processRoutes(routes, appSettings) {
         
         // If no thermoking data for the trailer, add a general notification
         if(!trailerData){
-            generalNotifications.push(`Thermoking data missing for trailer ${route.trailer} on route ${route.route} (door ${route.door}).`);
+            generalNotifications.push(`No trailer temp data available for trailer ${route.trailer} on route ${route.route} (door ${route.door}).`);
         }
         
         // -------- Check trailer temperature ---------
@@ -523,21 +469,32 @@ async function processRoutes(routes, appSettings) {
     // Check for repeated door usage and add to general notifications
     repeatedDoors.forEach(door => {
         const entries = doorUsage[door].slice().sort((a, b) => a.time - b.time);
-        const sequence = [];
+        const routeEntries = entries.map(entry => ({
+            route: entry.route,
+            time: entry.time,
+            formattedTime: formatDispatchTime(entry.time)
+        }));
+        const bookingLabel = entries.length === 2 ? 'double booked'
+            : entries.length === 3 ? 'triple booked'
+            : entries.length === 4 ? 'quadruple booked'
+            : `${entries.length}x booked`;
 
-        for (let i = 0; i < entries.length; i++) {
-            sequence.push(entries[i].route);
-            if (i < entries.length - 1) {
-                const gapHours = Math.round((entries[i + 1].time - entries[i].time) / 3600000);
-                sequence.push(`${gapHours}h`);
-            }
-        }
-
-        generalNotifications.push(`Door ${door} is repeated: ${sequence.join(' > ')}`);
+        generalNotifications.push({
+            type: 'doorRepeat',
+            door,
+            count: entries.length,
+            header: `${door} is ${bookingLabel}`,
+            routeEntries
+        });
     });
 
     // Clean up dismissed notifications that are no longer relevant (user changed a door that was double booked)
     currentDismissedNotifications = currentDismissedNotifications.filter(notif => {
+        if (notif?.type === 'doorRepeat' && Array.isArray(notif.routeEntries)) {
+            const currentRoutesForDoor = doorUsage[notif.door] ? doorUsage[notif.door].map(e => e.route) : [];
+            return notif.routeEntries.every(entry => currentRoutesForDoor.includes(entry.route));
+        }
+
         const text = getNotificationText(notif);
         if (!text.startsWith('Door ')) return true; // keep non-door notifications
         const parts = text.split(' is repeated: ');
@@ -553,7 +510,7 @@ async function processRoutes(routes, appSettings) {
     // Update storage with cleaned dismissed notifications
     chrome.storage.local.set({ dismissedNotifications: currentDismissedNotifications });
 
-    currentNewNotifications = generalNotifications.filter(n => !currentDismissedNotifications.some(entry => getNotificationText(entry) === n));
+    currentNewNotifications = generalNotifications.filter(n => !currentDismissedNotifications.some(entry => getNotificationText(entry) === getNotificationText(n)));
     currentTemperatureMessages = tempNotifications;
 
     renderDock({
