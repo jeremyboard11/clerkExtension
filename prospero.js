@@ -59,13 +59,13 @@ window.renderDock = function({ newNotifications = [], dismissedNotifications = [
             .item-card[data-type="dismissed"] .notif-txt { color: #999; font-style: normal; flex-grow: 1; text-align:center; }
             .item-card[data-type="dismissed"] .dismiss-btn { background: #444; }
             .door-repeat-card { flex-direction: column; align-items: stretch; }
-            .repeat-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
-            .repeat-item { display: flex; flex-direction: column; gap: 4px; padding: 6px 0; border-top: 1px solid #444; }
-            .repeat-item:first-child { border-top: none; }
-            .repeat-route { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: baseline; }
-            .repeat-route-id { font-size: 15px; font-weight: 700; color: #FFF; }
-            .repeat-route-time { font-size: 13px; color: #ccc; }
-            .repeat-separator { text-align: center; color: #888; font-size: 14px; }
+            .repeat-list { display: flex; flex-direction: column; align-items: stretch; align-self: stretch; margin: 4px 0px; }
+            .repeat-item { display: flex; flex-direction: column; }
+            .repeat-route { display: flex; justify-content: space-between; flex-wrap: wrap; align-items: baseline; align-self: stretch; border: 1px solid #555; background: #2b2b2b; border-radius: 6px; border-radius: 6px; }
+            .repeat-route span { padding:8px; }
+            .repeat-route-id { font-size: 16px; font-weight: 700; color: #FFF; }
+            .repeat-route-time { font-size: 14px; color: #ccc; }
+            .repeat-separator { text-align: center; color: #888; font-size: 12px; }
             .repeat-gap { text-align: center; font-size: 13px; color: #ccc; font-weight: 600; }
             .item-card.caughtup { font-style: italic; text-align: center; font-size: 16px; border: none; background: none; margin: 40px 0;}
             .temp-card { display: block; }
@@ -158,7 +158,7 @@ window.renderDock = function({ newNotifications = [], dismissedNotifications = [
                                 ${n.routeEntries.map((entry, idx) => `
                                     <div class="repeat-item">
                                         <div class="repeat-route">
-                                            <span class="repeat-route-id">${entry.route}</span>
+                                            <span class="repeat-route-id">${entry.route}${entry.shipment ? '>' + entry.shipment : ''}</span>
                                             <span class="repeat-route-time">${entry.formattedTime}</span>
                                         </div>
                                         ${idx < n.routeEntries.length - 1 ? `
@@ -393,13 +393,10 @@ async function processRoutes(routes, appSettings) {
         const trailerData = thermokingTrailers[route.trailer];
         const requiredTemps = appSettings.tempRules[route.routeGroup.toLowerCase()];
         const yardPad = yardTrailers[route.trailer]?.pad ?? "Not in Yard";
-        let trailerInDoor = false;
-        
+        let trailerInDoor = (yardPad == route.door);
+
         // Skip routes with no temp rules defined (If it's not a PDIFRSH, PDIFRZ or MIX route)
         if (!requiredTemps) {return;}
-        
-        // Is trailer in door?
-        if (yardPad == route.door) {trailerInDoor = true;}
         
         // If no thermoking data for the trailer, add a general notification
         if( route.trailer && !trailerData){
@@ -461,7 +458,7 @@ async function processRoutes(routes, appSettings) {
             if (!doorUsage[route.door]) {
                 doorUsage[route.door] = [];
             }
-            doorUsage[route.door].push({ route: route.route, time: routeTime });
+            doorUsage[route.door].push({ route: route.route, shipment: route.shipment || '', time: routeTime });
             if (doorUsage[route.door].length > 1) {
                 repeatedDoors.add(route.door);
             }
@@ -469,7 +466,7 @@ async function processRoutes(routes, appSettings) {
 
     });
 
-    // Check for common delivery sequences within +-4 doors with the same letter
+    // Check for common delivery sequences within +-4 doors (ANKENY1 is staged at B15 and B17)
     const routeSequences = routes.filter(r => r.door).map(r => ({
         route: r.route,
         door: r.door,
@@ -492,11 +489,12 @@ async function processRoutes(routes, appSettings) {
         }
     }
 
-    // Check for repeated door usage and add to general notifications
+    // Check for repeated door usage
     repeatedDoors.forEach(door => {
         const entries = doorUsage[door].slice().sort((a, b) => a.time - b.time);
         const routeEntries = entries.map(entry => ({
             route: entry.route,
+            shipment: entry.shipment || '',
             time: entry.time,
             formattedTime: formatDispatchTime(entry.time)
         }));
