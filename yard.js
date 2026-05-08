@@ -23,7 +23,7 @@ function getLocateHeaders() {
     }
 
     if (!headerRow) {
-        console.warn("No parent <tr> with class 'datagridheaderitem' found. (didnt find header row)");
+        console.warn("No parent <tr> with class 'datagridheaderitem' found.");
         return null;
     }
 
@@ -36,12 +36,10 @@ function getLocateHeaders() {
         locateHeaders[key] = index;
     });
     
-    console.log("Located headers:", locateHeaders);
     return locateHeaders;
 }
 
 function processTable() {
-    const output = [];
     const headers = getLocateHeaders();
     if (!headers) {
         alert("Could not determine header columns.");
@@ -54,7 +52,6 @@ function processTable() {
         return;
     }
 
-    // rename headers
     const headerMap = {
         "trailer": headers["trailer_#"],
         "pad": headers["current_pad"],
@@ -67,33 +64,76 @@ function processTable() {
     const yardData = Array.from(table.querySelectorAll("tr"))
         .map(row => {
             const cells = row.querySelectorAll("td");
-            
-            // Build the individual trailer object
             return Object.entries(headerMap).reduce((acc, [key, index]) => {
                 acc[key] = cells[index]?.innerText.trim() || "";
                 return acc;
             }, {});
         })
-        .filter(row => row.facility.toUpperCase() === "PDI")
+        .filter(row => row.facility && row.facility.toUpperCase() === "PDI")
         .reduce((acc, item) => {
-            // Key the entire object by the trailer number
             if (item.trailer) {
                 acc[item.trailer] = item;
             }
             return acc;
         }, {});
         
-        // Save to chrome local storage
-        chrome.storage.local.set({
-            yardTrailers: yardData,
-            yardLastUpdate: Date.now()
-        }, () => {
-            if (chrome.runtime.lastError) {
-                console.error("Error saving yard data:", chrome.runtime.lastError);
-            } else {
+    chrome.storage.local.set({
+        yardTrailers: yardData,
+        yardLastUpdate: Date.now()
+    }, () => {
+        if (chrome.runtime.lastError) {
+            console.error("Error saving yard data:", chrome.runtime.lastError);
+        } else {
             console.log("Local yard cache updated at " + new Date().toLocaleTimeString());
+            // Optional: visual feedback that it worked
+            const btn = document.getElementById('gemini-update-btn');
+            if(btn) {
+                const originalText = btn.innerText;
+                btn.innerText = "Updated!";
+                btn.style.backgroundColor = "#28a745";
+                setTimeout(() => {
+                    btn.innerText = originalText;
+                    btn.style.backgroundColor = "#007bff";
+                }, 2000);
+            }
         }
     });
 }
 
+/**
+ * Creates and injects the Update button into the DOM
+ */
+function createUpdateButton() {
+    // Prevent duplicate buttons if script runs twice
+    if (document.getElementById('gemini-update-btn')) return;
+
+    const btn = document.createElement('button');
+    btn.id = 'gemini-update-btn';
+    btn.innerText = 'Update Yard Data';
+    
+    // Styling to keep it in the top right
+    Object.assign(btn.style, {
+        position: 'fixed',
+        top: '10px',
+        right: '10px',
+        zIndex: '9999',
+        padding: '8px 12px',
+        backgroundColor: '#007bff',
+        color: 'white',
+        border: 'none',
+        borderRadius: '4px',
+        cursor: 'pointer',
+        fontWeight: 'bold',
+        boxShadow: '0 2px 5px rgba(0,0,0,0.2)',
+        fontFamily: 'sans-serif',
+        fontSize: '12px'
+    });
+
+    btn.addEventListener('click', processTable);
+    document.body.appendChild(btn);
+}
+
+// Initialize
+createUpdateButton();
+// Optional: Run once on load
 processTable();
