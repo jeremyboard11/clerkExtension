@@ -388,6 +388,8 @@ function logStyled(message, type = "success") {
 }
 
 function standardizeRoutes(routes) {
+    const validGroups = ["PDIFRSH", "PDIFRZ", "MIX"];
+
     const formatTime = (isoString) => {
         if (!isoString) return "";
         const date = new Date(isoString);
@@ -400,18 +402,25 @@ function standardizeRoutes(routes) {
 
     const cleanDoor = (str) => str?.replace(/[A-Za-z]+$/, '') || "";
 
-    return routes.map(route => ({
-        route: route.routeNum,
-        shipment: route.customField03,
-        routeGroup: prosperoCache.routeGroups[route.siteRouteGroupId],
-        door: cleanDoor(route.trailer1DoorNum),
-        trailer: prosperoCache.trailers[route.trailer1OutId]?.code || "",
-        plannedDispatchDate: route.plannedDispatchDate,
-        displayedDispatchDate: formatTime(route.plannedDispatchDate),
-        readyTime: route.trailer1ReadyTime,
-        tripId: route.tripId,
-        deliverySequence: route.deliverySequence,
-    }));
+    return routes
+        // 1. Filter out routes where the group name isn't in our allowed list
+        .filter(route => {
+            const groupName = prosperoCache.routeGroups[route.siteRouteGroupId];
+            return validGroups.includes(groupName);
+        })
+        // 2. Map the remaining valid routes to your standard format
+        .map(route => ({
+            route: route.routeNum,
+            shipment: route.customField03,
+            routeGroup: prosperoCache.routeGroups[route.siteRouteGroupId],
+            door: cleanDoor(route.trailer1DoorNum),
+            trailer: prosperoCache.trailers[route.trailer1OutId]?.code || "",
+            plannedDispatchDate: route.plannedDispatchDate,
+            displayedDispatchDate: formatTime(route.plannedDispatchDate),
+            readyTime: route.trailer1ReadyTime,
+            tripId: route.tripId,
+            deliverySequence: route.deliverySequence,
+        }));
 }
 
 async function processRoutes(routes, appSettings) {
@@ -457,11 +466,14 @@ async function processRoutes(routes, appSettings) {
 
     // --------------------- Loop through routes -----------------------
     routes.forEach(route => {
-        
+		
+		
         const trailerData = thermokingTrailers[route.trailer];
         const requiredTemps = appSettings.tempRules[route.routeGroup.toLowerCase()];
         const yardPad = yardTrailers[route.trailer]?.pad ?? "Not in Yard";
         let trailerInDoor = (yardPad == route.door);
+
+		console.log("required temps for route:"+route.route+" - "+route.routeGroup, requiredTemps);
 
         // Skip routes with no temp rules defined (If it's not a PDIFRSH, PDIFRZ or MIX route)
         if (!requiredTemps) {return;}

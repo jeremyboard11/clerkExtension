@@ -59,6 +59,18 @@
 				console.error("Failed to load mock trailer data.", err);
 			});
 		
+		// temp local route groups
+		fetch(document.currentScript.dataset.devProsperoRouteGroupsUrl)
+            .then(res => res.json())
+            .then(response => {
+                console.log("(Dev Mode): Loaded mock route group data.");
+                window.dispatchEvent(new CustomEvent('PROSPERO_DATA_READY', {
+                    detail: { type: 'routeGroups', response }
+                }));
+            })
+            .catch(err => {
+                console.error("Failed to load mock route group data.", err);
+            });
 	   
 	   
         const originalOpen = XMLHttpRequest.prototype.open;
@@ -106,20 +118,20 @@
                 }
 				
 				// intercept route group data
-                if (this._url && this._url.includes('controlName=DispatchBoardTripsFilter&siteId=1080')) {
-                    try {
-                        // Attempt to parse JSON for a cleaner log, otherwise log raw text
-                        const response = JSON.parse(this.responseText);
+                //if (this._url && this._url.includes('controlName=DispatchBoardTripsFilter&siteId=1080')) {
+                //    try {
+                //        // Attempt to parse JSON for a cleaner log, otherwise log raw text
+                //        const response = JSON.parse(this.responseText);
 
-                        window.dispatchEvent(new CustomEvent('PROSPERO_DATA_READY', {
-                            detail: { type: 'routeGroups', response }
-                        }));
+                //        window.dispatchEvent(new CustomEvent('PROSPERO_DATA_READY', {
+                //            detail: { type: 'routeGroups', response }
+                //        }));
 
-                    } catch (e) {
+                //    } catch (e) {
                         //error
-                        console.log('live error (Raw):', this.responseText);
-                    }
-                }
+                //        console.log('live error (Raw):', this.responseText);
+                //    }
+                //}
             });
 
             return originalSend.apply(this, arguments);

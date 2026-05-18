@@ -44,7 +44,7 @@
         },
         {
             "matches": [
-                "*://*/YardViewer/LocateTrailer.aspx",
+                "http://yardmgr/mds2/YardViewer/LocateTrailer.aspx",
                 "file:///*/@DEV/locateTrailer.html"
             ],
             "js": [

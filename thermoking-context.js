@@ -37,7 +37,10 @@
                     try {
                         // Attempt to parse JSON for a cleaner log, otherwise log raw text
                         const response = JSON.parse(this.responseText);
-
+						
+						const nowTs = new Date().toLocaleTimeString();
+						console.log("(DEV): Updating local thermoking data at: "+nowTs, response);
+						
                         window.dispatchEvent(new CustomEvent('THERMOKING_DATA_READY', {
                             detail: { type: 'trailers', response }
                         }));

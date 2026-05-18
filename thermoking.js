@@ -49,10 +49,15 @@ function standardizeTrailerData(data) {
 }
 
 // process incoming data and store in cache
-function runTKData(type, data) {
+async function runTKData(type, data) {
     //const { type, data } = payload;
     if (type === 'trailers') {
+		console.log("Processing trailer data...");
         // store trailer data
+		await chrome.storage.local.set({
+			thermokingTrailers: thermokingCache.trailers,
+			thermokingLastUpdate: Date.now()
+		});
         thermokingCache.trailers = standardizeTrailerData(data);
         // Resolve the trailer promise
         thermokingCache.resolveTrailers();

@@ -76,34 +76,38 @@ function processTable() {
             }
             return acc;
         }, {});
-        
-    chrome.storage.local.set({
-        yardTrailers: yardData,
-        yardLastUpdate: Date.now()
-    }, () => {
-        if (chrome.runtime.lastError) {
-            console.error("Error saving yard data:", chrome.runtime.lastError);
-        } else {
-            console.log("Local yard cache updated at " + new Date().toLocaleTimeString());
-            // Optional: visual feedback that it worked
-            const btn = document.getElementById('gemini-update-btn');
-            if(btn) {
-                const originalText = btn.innerText;
-                btn.innerText = "Updated!";
-                btn.style.backgroundColor = "#28a745";
-                setTimeout(() => {
-                    btn.innerText = originalText;
-                    btn.style.backgroundColor = "#007bff";
-                }, 2000);
-            }
-        }
-    });
+	
+	// UPDATE LOCAL YARD DATA IF MORE THAN 1 TRAILER IS SHOWN
+	if(Object.keys(yardData).length > 1){
+		chrome.storage.local.set({
+			yardTrailers: yardData,
+			yardLastUpdate: Date.now()
+		}, () => {
+			if (chrome.runtime.lastError) {
+				console.error("Error saving yard data:", chrome.runtime.lastError);
+			} else {
+				console.log("Local yard cache updated at " + new Date().toLocaleTimeString());
+				// Optional: visual feedback that it worked
+				const btn = document.getElementById('gemini-update-btn');
+				if(btn) {
+					const originalText = btn.innerText;
+					btn.innerText = "Updated!";
+					btn.style.backgroundColor = "#28a745";
+					setTimeout(() => {
+						btn.innerText = originalText;
+						btn.style.backgroundColor = "#007bff";
+					}, 2000);
+				}
+			}
+		});
+	}
 }
 
 /**
  * Creates and injects the Update button into the DOM
  */
 function createUpdateButton() {
+	console.log("rendering update button");
     // Prevent duplicate buttons if script runs twice
     if (document.getElementById('gemini-update-btn')) return;
 
@@ -134,6 +138,6 @@ function createUpdateButton() {
 }
 
 // Initialize
-createUpdateButton();
+setTimeout(createUpdateButton(), 5000);
 // Optional: Run once on load
 processTable();
