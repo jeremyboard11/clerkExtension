@@ -22,8 +22,11 @@
                 "@DEV/dev-prospero-data.json",
                 "@DEV/dev-prospero-routeGroups.json",
                 "@DEV/dev-prospero-trailers.json",
+                "@DEV/dev-stop-locations.json",
                 "thermoking-context.js",
-                "@DEV/dev-thermoking-data.json"
+                "@DEV/dev-thermoking-data.json",
+                "floating-dock.css",
+                "floating-dock.js"
             ],
             "matches": [
                 "https://web.prospero.com/*",

@@ -1,302 +1,25 @@
 // ------------ UI HELPER FUNCTIONS ------------
 
-window.renderDock = function({ newNotifications = [], dismissedNotifications = [], snoozedNotifications = [], temperatureMessages = [] } = {}) {
-    let host = document.getElementById('temp-dock-host');
-    let shadow;
-
-    // --- INITIAL BOOTSTRAP (Runs once) ---
-    if (!host) {
-        host = document.createElement('div');
-        host.id = 'temp-dock-host';
-        document.documentElement.appendChild(host);
-        shadow = host.attachShadow({ mode: 'open' });
-
-        const style = document.createElement('style');
-        style.textContent = `
-            :host { --bg: #222; --accent: #DDD; --text: #999; --err: #ff5c4d; --notif: #ffcc00; }
-            #dock {
-                position: fixed; top: 20px; right: 20px; z-index: 2147483647;
-                background: var(--bg); color: var(--text); border-radius: 12px;
-                box-shadow: 0 4px 15px rgba(0,0,0,0.3); padding: 10px;
-                font-family: system-ui, sans-serif; cursor: grab; width: fit-content;
-                width: 360px; max-width: 90vw;
-            }
-            .btn-row { display: flex; gap: 10px; }
-            button {
-                background: #444; border: none; color: white; padding: 8px 14px;
-                border-radius: 6px; cursor: pointer; font-weight: bold;
-                position: relative; display: flex; align-items: center; gap: 5px;
-            }
-            button:hover { background: #555; }
-            .badge {
-                background: #ff4d4d; color: white; font-size: 10px;
-                padding: 1px 6px; border-radius: 10px; min-width: 10px; text-align: center;
-            }
-            .content-area { 
-                max-height: 400px; overflow-y: auto; display: none; margin-top: 10px;
-            }
-            .content-area::-webkit-scrollbar {
-                width: 10px;
-            }
-
-            .content-area::-webkit-scrollbar-track {
-                background: #222;
-                border-radius: 8px;
-            }
-
-            .content-area::-webkit-scrollbar-thumb {
-                background: #666;
-                border-radius: 8px;
-                border: 2px solid #222;
-            }
-
-            .content-area::-webkit-scrollbar-thumb:hover {
-                background: #888;
-            }
-            .item-card { border: 1px solid #777; background-color:#333; padding: 12px; font-size: 13px; border-radius: 8px; margin-bottom: 8px; display: block; }
-            .item-card:hover { background-color: #444; }
-            .item-card[data-type="new"], .item-card[data-type="dismissed"] { display: flex; align-items: center; }
-            .item-card[data-type="dismissed"] { background-color: #2b2b2b; border-color: #555; opacity: 0.85; align-items: center; }
-            .item-card[data-type="dismissed"] .notif-txt { color: #999; font-style: normal; flex-grow: 1; text-align:center; }
-            .item-card[data-type="dismissed"] .dismiss-btn { background: #444; }
-            .door-repeat-card { flex-direction: column; align-items: stretch; }
-            .repeat-list { display: flex; flex-direction: column; align-items: stretch; align-self: stretch; margin: 4px 0px; }
-            .repeat-item { display: flex; flex-direction: column; }
-            .repeat-route { display: flex; justify-content: space-between; flex-wrap: wrap; align-items: baseline; align-self: stretch; border: 1px solid #555; background: #2b2b2b; border-radius: 6px; border-radius: 6px; }
-            .repeat-route span { padding:8px; }
-            .repeat-route-id { font-size: 16px; font-weight: 700; color: #FFF; }
-            .repeat-route-time { font-size: 14px; color: #ccc; }
-            .repeat-separator { text-align: center; color: #888; font-size: 12px; }
-            .repeat-gap { text-align: center; font-size: 13px; color: #ccc; font-weight: 600; }
-            .item-card.caughtup { font-style: italic; text-align: center; font-size: 16px; border: none; background: none; margin: 40px 0;}
-            .temp-card { display: block; }
-            .primary-info { display: flex; justify-content: space-between; font-size: 16px; font-weight: bold; color: var(--accent); margin-bottom: 8px; }
-            .secondary-info { font-size: 14px; color: #ccc; margin-bottom: 8px; }
-            .temp-issues { margin: 8px 0; }
-            .temp-issues .issue-item { margin: 4px 0; font-size: 13px; color: var(--notif); font-weight: bold; }
-            .temp-issues .issue-item::before { content: '⚠ '; }
-            .footer-info { font-size: 11px; color: #aaa; margin-top: 8px; }
-            .footer-info div { margin: 2px 0; }
-            .err-txt { color: var(--err); font-size: 11px; margin-top: 3px; padding-left: 5px; }
-            .notif-txt { color: var(--notif); flex: 1; }
-            .notif-txt.repeatDoor { font-size: 20px; }
-            .section { margin-bottom: 10px; }
-            .section h4 { margin: 0 0 5px 0; color: var(--accent); font-size: 14px; }
-            .snooze-btn, .dismiss-btn { margin-left: 4px; background: none; color: #DDD; border: none; padding: 12px; cursor: pointer; font-size: 14px; }
-            .snooze-btn:hover, .dismiss-btn:hover { background: rgba(255, 255, 255, 0.1); }
-        `;
-
-        const dock = document.createElement('div');
-        dock.id = 'dock';
-        dock.innerHTML = `
-            <div class="btn-row">
-                <button id="btn-notif">Notifications <span id="count-notif" class="badge">0</span></button>
-                <button id="btn-temp">Temperature Issues <span id="count-temp" class="badge">0</span></button>
-            </div>
-            <div id="panel-notif" class="content-area"></div>
-            <div id="panel-temp" class="content-area"></div>
-        `;
-
-        shadow.appendChild(style);
-        shadow.appendChild(dock);
-
-        // Draggable Logic
-        let isDragging = false, ox, oy;
-        dock.onmousedown = (e) => {
-            if (e.target.closest('button')) return;
-            isDragging = true;
-            ox = e.clientX - dock.offsetLeft; oy = e.clientY - dock.offsetTop;
-        };
-        document.onmousemove = (e) => {
-            if (!isDragging) return;
-            dock.style.left = (e.clientX - ox) + 'px';
-            dock.style.top = (e.clientY - oy) + 'px';
-            dock.style.right = 'auto';
-        };
-        document.onmouseup = () => isDragging = false;
-
-        // Toggle Logic
-        const pTemp = shadow.querySelector('#panel-temp');
-        const pNotif = shadow.querySelector('#panel-notif');
-        
-        shadow.querySelector('#btn-temp').onclick = () => {
-            pTemp.style.display = pTemp.style.display === 'block' ? 'none' : 'block';
-            pNotif.style.display = 'none';
-        };
-        shadow.querySelector('#btn-notif').onclick = () => {
-            pNotif.style.display = pNotif.style.display === 'block' ? 'none' : 'block';
-            pTemp.style.display = 'none';
-        };
-    } else {
-        shadow = host.shadowRoot;
-    }
-
-    // Update current state
-    currentNewNotifications = newNotifications;
-    currentDismissedNotifications = dismissedNotifications;
-    currentTemperatureMessages = temperatureMessages;
-
-    // --- PARTIAL RE-RENDER LOGIC ---
-
-    // 1. Update Badge Counts
-    const notifBadge = shadow.querySelector('#count-notif');
-    notifBadge.innerText = newNotifications.length;
-    notifBadge.style.display = newNotifications.length ? 'inline-flex' : 'none';
-    const tempBadge = shadow.querySelector('#count-temp');
-    tempBadge.innerText = temperatureMessages.length;
-    tempBadge.style.display = temperatureMessages.length ? 'inline-flex' : 'none';
-
-    // 2. Update Notification List
-    const notifPanel = shadow.querySelector('#panel-notif');
-    notifPanel.innerHTML = `
-        <div class="section">
-            <h4>New Notifications</h4>
-            ${newNotifications.map(n => {
-                const text = getNotificationText(n);
-                // -------- Door repeat notifications -----------
-                if (n?.type === 'doorRepeat') {
-                    return `
-                        <div class="item-card door-repeat-card" data-type="new">
-                            <div class="notif-txt repeatDoor">${text}</div>
-                            <div class="repeat-list">
-                                ${n.routeEntries.map((entry, idx) => `
-                                    <div class="repeat-item">
-                                        <div class="repeat-route">
-                                            <span class="repeat-route-id">${entry.route}${entry.shipment ? '>' + entry.shipment : ''}</span>
-                                            <span class="repeat-route-time">${entry.formattedTime}</span>
-                                        </div>
-                                        ${idx < n.routeEntries.length - 1 ? `
-                                            <div class="repeat-separator">•</div>
-                                            <div class="repeat-gap">${Math.round(((n.routeEntries[idx + 1].time - entry.time) / 3600000) * 2) / 2}h</div>
-                                            <div class="repeat-separator">•</div>
-                                        ` : ''}
-                                    </div>
-                                `).join('')}
-                            </div>
-                            <button class="dismiss-btn">Dismiss</button>
-                        </div>
-                    `;
-                }
-                // ---------- Snoozable notifications ----------
-                if (n?.type === 'snoozable') {
-                    return `
-                        <div class="item-card" data-type="new">
-                            <span class="notif-txt">${text}</span>
-                            <button class="snooze-btn">Snooze</button>
-                            <button class="dismiss-btn">Dismiss</button>
-                        </div>
-                    `;
-                }
-                return `
-                    <div class="item-card" data-type="new">
-                        <span class="notif-txt">${text}</span>
-                        <button class="dismiss-btn">Dismiss</button>
-                    </div>
-                `;
-            }).join('') || '<div class="item-card caughtup">No new notifications</div>'}
-        </div>
-        <div class="section">
-            <h4>Snoozed Notifications</h4>
-            ${snoozedNotifications.map(s => {
-                const text = getNotificationText(s.notification);
-                const snoozeTime = new Date(s.snoozeAt).toLocaleString();
-                return `
-                    <div class="item-card" data-type="snoozed">
-                        <span class="notif-txt">${text}</span>
-                        <button class="dismiss-btn">Dismiss</button>
-                        <div class="footer-info">Snoozed at: ${snoozeTime}</div>
-                    </div>
-                `;
-            }).join('') || '<div class="item-card">No snoozed notifications</div>'}
-        </div>
-        <div class="section">
-            <h4>Dismissed Notifications</h4>
-            ${dismissedNotifications.map(n => `
-                <div class="item-card" data-type="dismissed">
-                    <span class="notif-txt">${getNotificationText(n)}</span>
-                </div>
-            `).join('') || '<div class="item-card">No dismissed notifications</div>'}
-        </div>
-    `;
-
-    // Add dismiss event listeners
-    notifPanel.querySelectorAll('.dismiss-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const card = e.target.closest('.item-card');
-            const text = card.querySelector('.notif-txt').textContent.replace('• ', '').trim();
-            const type = card.dataset.type;
-            if (type === 'new') {
-                const index = currentNewNotifications.findIndex(entry => getNotificationText(entry) === text);
-                if (index !== -1) {
-                    currentNewNotifications.splice(index, 1);
-                }
-                currentDismissedNotifications.unshift({ text, dismissedAt: Date.now() });
-            } else if (type === 'snoozed') {
-                const index = currentSnoozedNotifications.findIndex(entry => getNotificationText(entry.notification) === text);
-                if (index !== -1) {
-                    currentSnoozedNotifications.splice(index, 1);
-                }
-                currentDismissedNotifications.unshift({ text, dismissedAt: Date.now() });
-                chrome.storage.local.set({ snoozedNotifications: currentSnoozedNotifications });
-            } else {
-                currentDismissedNotifications = currentDismissedNotifications.filter(entry => getNotificationText(entry) !== text);
-            }
-            chrome.storage.local.set({ dismissedNotifications: currentDismissedNotifications });
-            renderDock({
-                newNotifications: currentNewNotifications,
-                dismissedNotifications: currentDismissedNotifications,
-                snoozedNotifications: currentSnoozedNotifications,
-                temperatureMessages: currentTemperatureMessages
-            });
-        });
+window.renderDock = async function(args = {}) {
+    const { renderDock } = await import(chrome.runtime.getURL('floating-dock.js'));
+    renderDock({
+        ...args,
+        currentAppSettings
     });
-
-    // Add snooze event listeners
-    notifPanel.querySelectorAll('.snooze-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const card = e.target.closest('.item-card');
-            const text = card.querySelector('.notif-txt').textContent.replace('• ', '').trim();
-            const index = currentNewNotifications.findIndex(entry => getNotificationText(entry) === text);
-            if (index !== -1) {
-                const notification = currentNewNotifications.splice(index, 1)[0];
-                const snoozeDuration = (currentAppSettings.prospero_notificationSnoozeMinutes || 5) * 60 * 1000;
-                currentSnoozedNotifications.push({
-                    notification,
-                    snoozeAt: Date.now(),
-                    snoozeUntil: Date.now() + snoozeDuration
-                });
-                chrome.storage.local.set({ snoozedNotifications: currentSnoozedNotifications });
-                renderDock({
-                    newNotifications: currentNewNotifications,
-                    dismissedNotifications: currentDismissedNotifications,
-                    snoozedNotifications: currentSnoozedNotifications,
-                    temperatureMessages: currentTemperatureMessages
-                });
-            }
-        });
-    });
-
-    // 3. Update Temperature List (Formatted: Trailer > Route > Door)
-    const tempPanel = shadow.querySelector('#panel-temp');
-    tempPanel.innerHTML = temperatureMessages.map(item => `
-        <div class="item-card temp-card">
-            <div class="primary-info">
-                <span>Trailer: ${item.trailer}</span>
-                <span>Door: ${item.door}</span>
-            </div>
-            <div class="secondary-info">Route: ${item.route} | Route Group: ${item.routeGroup}</div>
-            <div class="temp-issues">
-                ${((item.errors || []).length ? (item.errors || []).map(err => `<div class="issue-item">${err}</div>`).join('') : '<div class="issue-item">No issues found.</div>')}
-            </div>
-            <div class="footer-info">
-                <div>Last Updated: ${item.updated ? new Date(item.updated).toLocaleString() : 'N/A'}</div>
-                <div>Location: ${item.position || 'N/A'}</div>
-            </div>
-        </div>
-    `).join('') || '<div class="item-card">No temperature issues</div>';
 };
 
 // ------------ Data Cache and State Management ------------
+
+let stopLocations = {};
+window.getStopLocations = async function() {
+    const response = await fetch(chrome.runtime.getURL('@DEV/dev-stop-locations.json'));
+    const data = await response.json();
+    stopLocations = data.reduce((accumulator, currentCategory) => {
+        const namesArray = currentCategory.filterEntry.map(entry => entry.desc);
+        accumulator[currentCategory.name] = namesArray;
+        return accumulator;
+    }, {});
+};
 
 let currentNewNotifications = [];
 let currentDismissedNotifications = [];
@@ -424,6 +147,7 @@ function standardizeRoutes(routes) {
 }
 
 async function processRoutes(routes, appSettings) {
+    console.log("stop locations", stopLocations);
     const doorUsage = {};
     const repeatedDoors = new Set();
 
@@ -466,14 +190,20 @@ async function processRoutes(routes, appSettings) {
 
     // --------------------- Loop through routes -----------------------
     routes.forEach(route => {
-		
-		
+		// prototype wms load data
+        const loadData = {
+            route: route.route,
+            shipment: route.shipment,
+            batchesLoaded: 2,
+            batchesStaged: 10,
+            batchesInProgress: 5            
+        }
+        
         const trailerData = thermokingTrailers[route.trailer];
+        console.log(trailerData);
         const requiredTemps = appSettings.tempRules[route.routeGroup.toLowerCase()];
         const yardPad = yardTrailers[route.trailer]?.pad ?? "Not in Yard";
         let trailerInDoor = (yardPad == route.door);
-
-		console.log("required temps for route:"+route.route+" - "+route.routeGroup, requiredTemps);
 
         // Skip routes with no temp rules defined (If it's not a PDIFRSH, PDIFRZ or MIX route)
         if (!requiredTemps) {return;}
@@ -530,34 +260,70 @@ async function processRoutes(routes, appSettings) {
             generalNotifications.push(`No trailer temp data available for trailer ${route.trailer} on route ${route.route} (door ${route.door}).`);
         }
 
-        // -------- Notify of incorrect trailer temp setpoints ---------
+        // -------- Notify of trailer temp issues ---------
         if(appSettings.prospero_tracking && trailerData && trailerInDoor && route.trailer && route.door){
             const issues = [];
             const noseSetPoint = trailerData?.zones?.nose?.setPoint;
             const noseActive = trailerData?.zones?.nose?.active;
             const tailSetPoint = trailerData?.zones?.tail?.setPoint;
             const tailActive = trailerData?.zones?.tail?.active;
+            let setpointIssue = false;
 
             // check ignition status
             if(trailerData.ignitionStatus === "Off"){
                 issues.push(`Trailer ignition is off, expected On`);
             }
 
-            // check nose temps
+            // check nose setpoint
             if (requiredTemps.nose !== null && !noseActive) {
+                setpointIssue = true;
                 issues.push(`Nose reefer is not running, expected ${requiredTemps.nose}°`);
-            } else if (requiredTemps.nose !== null && noseSetPoint === undefined) {
-                issues.push(`Nose temp setpoint was not found, expected ${requiredTemps.nose}°`);
             } else if (requiredTemps.nose !== null && noseSetPoint !== requiredTemps.nose) {
-                issues.push(`Nose temp setpoint is ${noseSetPoint}°, expected ${requiredTemps.nose}°`);
+                // allow colder nose setpoints for PDIFRZ and MIX routes (ex. trailer was already in door and set to -20 instead of -18)
+                if (noseSetPoint > requiredTemps.nose && (route.routeGroup === "PDIFRZ" || route.routeGroup === "MIX")) {
+                    setpointIssue = true;
+                    issues.push(`Nose temp setpoint is ${noseSetPoint}°, expected ${requiredTemps.nose}°`);
+                }
             }
-            // check tail temps
+            
+            // check tail setpoint
             if (requiredTemps.tail !== null && !tailActive) {
+                setpointIssue = true;
                 issues.push(`Tail reefer is not running, expected ${requiredTemps.tail}°`);
             } else if (requiredTemps.tail !== null && tailSetPoint === undefined) {
+                setpointIssue = true;
                 issues.push(`Tail temp setpoint was not found, expected ${requiredTemps.tail}°`);
             } else if (requiredTemps.tail !== null && tailSetPoint !== requiredTemps.tail) {
+                setpointIssue = true;
                 issues.push(`Tail temp setpoint is ${tailSetPoint}°, expected ${requiredTemps.tail}°`);
+            }
+
+            // Check trailer discharge air temp if setpoints are good and trailer loading has started and trailer has been in door for at least 60 minutes
+            if(!setpointIssue && loadData.batchesLoaded > 0 && trailerData.stationaryMinutes >= 60){
+                let maxNose = null;
+                let maxTail = null;
+                switch(route.routeGroup) {
+                    case "PDIFRZ":
+                        maxNose = 0;
+                        maxTail = null;
+                        break;
+                    case "MIX":
+                        maxNose = 0;
+                        maxTail = 40;
+                        break;
+                    case "PDIFRSH":
+                        maxNose = 40;
+                        maxTail = null;
+                        break;
+                }
+                const noseDischarge = trailerData?.zones?.nose?.dischargeAir;
+                const tailDischarge = trailerData?.zones?.tail?.dischargeAir;
+                if (maxNose !== null && noseDischarge !== undefined && noseDischarge > maxNose) {
+                    issues.push(`Nose discharge air temp is ${noseDischarge}°, expected <= ${maxNose}°`);
+                }
+                if (maxTail !== null && tailDischarge !== undefined && tailDischarge > maxTail) {
+                    issues.push(`Tail discharge air temp is ${tailDischarge}°, expected <= ${maxTail}°`);
+                }
             }
 
             // push to tempNotifications if any issues found
@@ -569,7 +335,8 @@ async function processRoutes(routes, appSettings) {
                     routeGroup: route.routeGroup,
                     errors: issues,
                     updated: trailerData.updated,
-                    position: trailerData.position
+                    position: trailerData.position,
+                    stationary: trailerData.stationaryMinutes
                 });
             }
         }
@@ -589,7 +356,11 @@ async function processRoutes(routes, appSettings) {
     });
 
     // ------- Notify of common stores staged too close together (within +-4 doors) (ex. ANKENY1 on 2 different routes is staged at B15 and B17) -------
-    if(appSettings.prospero_commonStoresPriximity){
+    if (appSettings.prospero_commonStoresPriximity) {
+        
+        // Store locations set for quick lookup
+        const storeNames = new Set(stopLocations.Stores || []);
+
         const routeSequences = routes.filter(r => r.door).map(r => ({
             route: r.route,
             door: r.door,
@@ -603,10 +374,22 @@ async function processRoutes(routes, appSettings) {
             for (let j = i + 1; j < routeSequences.length; j++) {
                 const r1 = routeSequences[i];
                 const r2 = routeSequences[j];
-                if (r1.doorLetter === r2.doorLetter && Math.abs(r1.doorNum - r2.doorNum) <= 3 && Math.abs(Date.parse(r1.plannedDispatchDate) - Date.parse(r2.plannedDispatchDate)) <= 5 * 60 * 60 * 1000) {
-                    const common = r1.sequence.filter(s => r2.sequence.includes(s));
-                    if (common.length > 0) {
-                        generalNotifications.push(`[${r1.route} at ${r1.door}] and [${r2.route} at ${r2.door}] both stop at: ${common.join(', ')}. Pickers will mix batches and they will be harder to load.`);
+                
+                if (r1.doorLetter === r2.doorLetter && 
+                    Math.abs(r1.doorNum - r2.doorNum) <= 3 && 
+                    Math.abs(Date.parse(r1.plannedDispatchDate) - Date.parse(r2.plannedDispatchDate)) <= 5 * 60 * 60 * 1000) {
+                    
+                    // Get all stops that match between both routes
+                    const commonStops = r1.sequence.filter(s => r2.sequence.includes(s));
+                    
+                    if (commonStops.length > 0) {
+                        // Only keep stops that are in the store names set
+                        const commonStores = commonStops.filter(stop => storeNames.has(stop));
+
+                        // send the notification if there are actual store conflicts
+                        if (commonStores.length > 0) {
+                            generalNotifications.push(`[${r1.route} at ${r1.door}] and [${r2.route} at ${r2.door}] both stop at: ${commonStores.join(', ')}. Pickers will mix batches and they will be harder to load.`);
+                        }
                     }
                 }
             }
@@ -787,6 +570,9 @@ async function init() {
         return;
     }
     console.log("Clerk Extension is enabled.", appSettings.devMode ? appSettings : "Live mode");
+
+    // load stop locations
+    await window.getStopLocations();
 
     // load dismissed notifications
     const { dismissedNotifications: storedDismissed } = await chrome.storage.local.get('dismissedNotifications');

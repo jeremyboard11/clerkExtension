@@ -19,26 +19,37 @@ function standardizeTrailerData(data) {
     return data['aaData'].reduce((acc, trailer) => {
         const trailerCode = trailer.vehicleName;
         
+        // --- PARSE STATIONARY TIME TO MINUTES ---
+        let stationaryMinutes = 0;
+        if (trailer.stationary) {
+            const [hours, minutes, seconds] = trailer.stationary.split(':').map(Number);
+            const totalSeconds = (hours * 3600) + (minutes * 60) + seconds;
+            stationaryMinutes = Math.floor(totalSeconds / 60); 
+        }
+        // ----------------------------------------
+
         acc[trailerCode] = {
             zones: {
                 "nose": {
                     setPoint: trailer.zones[0].setPoint ? parseInt(trailer.zones[0].setPoint) : null,
                     returnAir: trailer.zones[0].returnAir ? parseInt(trailer.zones[0].returnAir) : null,
                     dischargeAir: trailer.zones[0].dischargeAir ? parseInt(trailer.zones[0].dischargeAir) : null,
-                    active: trailer.zones[0].active ? trailer.zones[0].active : null
+                    active: trailer.zones[0].active ? trailer.zones[0].active : null,
+                    operatingMode: trailer.operatingMode1,
                 },
                 "tail": {
                     setPoint: trailer.zones[1].setPoint ? parseInt(trailer.zones[1].setPoint) : null,
                     returnAir: trailer.zones[1].returnAir ? parseInt(trailer.zones[1].returnAir) : null,
                     dischargeAir: trailer.zones[1].dischargeAir ? parseInt(trailer.zones[1].dischargeAir) : null,
-                    active: trailer.zones[1].active ? trailer.zones[1].active : null
+                    active: trailer.zones[1].active ? trailer.zones[1].active : null,
+                    operatingMode: trailer.operatingMode2,
                 }
             },
             ambientTemperature: trailer.ambientTemperature ? parseInt(trailer.ambientTemperature, 10) : null,
             ignitionStatus: trailer.ignitionStatus,
             reefer: trailer.reefer,
             updated: trailer.formattedDataDate,
-            stationary: trailer.stationary,
+            stationaryMinutes: stationaryMinutes,
             position: trailer.shortPosition,
             coordinates: { lat: trailer.latitude, lng: trailer.longitude },
             trailerCode: trailerCode
